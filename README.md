@@ -3,6 +3,8 @@ A simple extensible scene graph / level design utility for OpenGL with (optional
 
 Right now this is still in development, please check 'to do' for the list of upcoming features.
 
+
+
 ## features
 * Scene graph that uses 'SceneNodes'. Nodes can have children which forms a tree data structure.
 * Children are always rendered within the parents transformation matrix, so child positions are always relative to parent positions.
@@ -114,6 +116,10 @@ Now just like that, our GUI will show the TriangleNode in the editor - and the I
 ```
 // TODO
 ```
+
+## building fullmetal
+
+This section will be complete after version 1 is ready. There will be VS + CMAKE build support.
 
 ## todo
 * Implement an FBX loader for loading and displaying 3d models.
