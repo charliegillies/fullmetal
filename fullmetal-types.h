@@ -27,7 +27,8 @@ namespace fm {
 	struct NodeFunctions {
 		// typedef of a function that takes json/tnode params
 		typedef std::function<void(nlohmann::json&, TNode& node)> ParseFunction;
-		
+		typedef std::function<void(TNode*)> IntrospectFunction;
+
 		/* 
 		 * Function that takes json & tnode params.
 		 * Reads the node from JSON.
@@ -40,9 +41,18 @@ namespace fm {
 		 */
 		ParseFunction writeFunction;
 
+		/*
+		 * Function that draws the internal settings of the TNode.
+		 */
+		IntrospectFunction introspectFunction;
+
 		void set_parse_functions(ParseFunction readFunc, ParseFunction writeFunc) {
 			readFunction = readFunc;
 			writeFunction = writeFunc;
+		}
+
+		void set_introspection_function(IntrospectFunction introFunc) {
+			introspectFunction = introFunc;
 		}
 	};
 
@@ -60,6 +70,7 @@ namespace fm {
 			virtual SceneNode* create_node() = 0;
 			virtual SceneNode* read(nlohmann::json& json) = 0;
 			virtual void write(nlohmann::json& json, SceneNode* node) = 0;
+			virtual void introspect(SceneNode* node) = 0;
 		};
 
 		template<class TNode>
@@ -92,6 +103,14 @@ namespace fm {
 				auto castedNode = dynamic_cast<TNode*>(node);
 				assert(castedNode != nullptr);
 				nodeFunctions.writeFunction(json, *castedNode);
+			}
+
+			virtual void introspect(SceneNode * node) override
+			{
+				// write the node to JSON
+				auto castedNode = dynamic_cast<TNode*>(node);
+				assert(castedNode != nullptr);
+				nodeFunctions.introspectFunction(castedNode);
 			}
 		};
 
@@ -149,6 +168,16 @@ namespace fm {
 			j["node_id"] = nodeLink->parse_id;
 
 			return true;
+		}
+
+		void introspect(SceneNode* node) {
+			std::type_index index = std::type_index(typeid(*node));
+			// now try to get the node type link from the index
+			auto nodeLink = _linksByType[index];
+			if (nodeLink == nullptr) return;
+			
+			// introspect the node..
+			nodeLink->introspect(node);
 		}
 
 		/* 

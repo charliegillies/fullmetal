@@ -26,8 +26,20 @@ namespace fm {
 		 * Config for the graph render method.
 		 */
 		struct GraphRenderConfig {
+			/*
+			 * If the window is toggled on or not.
+			 */
 			bool window_toggled;
+
+			/*
+			 * The node that has been selected, if any.
+			 */
 			SceneNode* selected_node;
+
+			/*
+			 * The filepath to the file that is being written/read from, if any.
+			 */
+			std::string filepath;
 
 			GraphRenderConfig();
 		};
@@ -37,12 +49,17 @@ namespace fm {
 		 * Must be called after updateGui() but before renderGui().
 		 * Param 'typeTable' can be null, if it is then no add node options will draw.
 		 */
-		void renderNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable);
+		void drawNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable);
 
 		/*
 		 * Renders the add node options from the node type table.
 		 */
-		void renderAddNodeOptions(SceneNodeGraph* nodeGraph, GraphRenderConfig* graphConfig, NodeTypeTable* nodeTypeTable);
+		void drawAddNodeOptions(SceneNodeGraph* nodeGraph, GraphRenderConfig* graphConfig, NodeTypeTable* _nodeTypeTable);
+
+		/*
+		 * Deletes a node from the graph.
+		 */
+		void deleteNodeFromGraph(fm::gui::GraphRenderConfig * graphConfig, fm::SceneNodeGraph * nodeGraph);
 
 		/*
 		 * ImGui shortcut to draw a combo box with a vector of std::strings.
@@ -52,13 +69,18 @@ namespace fm {
 		/*
 		 * Renders the scene nodes. Called by renderNodeGraph.
 		 */
-		void renderNodes(std::vector<SceneNode*>& nodes, GraphRenderConfig* config);
+		void drawNodes(std::vector<SceneNode*>& nodes, GraphRenderConfig* config);
+
+		/* 
+		 * Draws an input string field with ImGui, using the modern std::string.
+		 */
+		void guiString(std::string& str, std::string label, int bufSize = 256);
 
 		/*
 		 * Renders a specific scene node.
 		 * Recursively calls itself for the given nodes children.
 		 */
-		SceneNode* renderNodeSelect(SceneNode* node, GraphRenderConfig* config);
+		SceneNode* drawNodeSelect(SceneNode* node, GraphRenderConfig* config);
 
 		/*
 		 * Introspects a color.

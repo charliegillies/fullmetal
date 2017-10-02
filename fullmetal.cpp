@@ -3,6 +3,7 @@
 #include <math.h>
 #include <gl/GL.h>
 #include <gl/GLU.h>
+#include <cassert>
 
 // GL HELPERS
 void fm::fmApplyColor(Color& color)
@@ -21,6 +22,29 @@ void fm::fmNormalVertex(const Vector3 & normal, float x, float y, float z)
 {
 	glNormal3f(normal.x, normal.y, normal.z);
 	glVertex3f(x, y, z);
+}
+
+bool fm::removeNodeFromVector(SceneNode * node, std::vector<SceneNode*>& _nodes)
+{
+	for (auto i = _nodes.begin(); i != _nodes.end(); ++i) {
+		auto n = *i;
+
+		// if found node, erase..
+		if (n == node) {
+			_nodes.erase(i);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void fm::moveNodeUpHierarchy(SceneNode * node, SceneNodeGraph * graph)
+{
+}
+
+void fm::moveNodeDownHierarchy(SceneNode * node, SceneNodeGraph * graph)
+{
 }
 
 // VECTOR 3 IMPLEMENTATION
@@ -315,8 +339,10 @@ fm::SceneNode* fm::SceneNodeGraph::addNode(SceneNode * node)
 void fm::SceneNodeGraph::render()
 {
 	// render all the known nodes
-	for (auto node : _nodes)
+	for (auto node : _nodes) {
+		if (!node->enabled) continue;
 		node->render();
+	}
 }
 
 int fm::SceneNodeGraph::nodeCount()
@@ -335,6 +361,14 @@ std::vector<fm::SceneNode*>& fm::SceneNodeGraph::getNodes()
 	return _nodes;
 }
 
+void fm::SceneNodeGraph::removeNode(SceneNode * node)
+{
+	if (!removeNodeFromVector(node, _nodes)) {
+		// TODO handle fall through
+		// this means that no node was erased..
+	}
+}
+
 // SCENE NODE IMPLEMENTATION
 fm::SceneNode::SceneNode()
 {
@@ -343,6 +377,8 @@ fm::SceneNode::SceneNode()
 	_uid = globalUID;
 
 	name = "Scene Node";
+	_parent = nullptr;
+	enabled = true;
 }
 
 fm::SceneNode::~SceneNode()
@@ -356,13 +392,35 @@ fm::SceneNode::~SceneNode()
 
 void fm::SceneNode::render()
 {
-	for (auto child : childNodes)
+	for (auto child : childNodes) {
+		if (!child->enabled) continue;
+
 		child->render();
+	}
 }
 
 void fm::SceneNode::addChild(SceneNode * child)
 {
+	// Ensure that the new child doesn't have a parent already
+	assert(child->_parent == nullptr);
+	// Assign child parent to this node
+	child->_parent = this;
+	// Put child into the collection
 	childNodes.push_back(child);
+}
+
+fm::SceneNode* fm::SceneNode::removeChild(SceneNode * child)
+{
+	if (!removeNodeFromVector(child, childNodes)) {
+		//TODO handle..
+	}
+	else
+		return child;
+}
+
+fm::SceneNode * fm::SceneNode::getParent()
+{
+	return _parent;
 }
 
 int fm::SceneNode::getUniqueId()

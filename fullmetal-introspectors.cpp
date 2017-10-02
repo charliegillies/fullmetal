@@ -2,7 +2,8 @@
  * Contains the implementations of the SceneNode.introspect() methods.
  */
 
-#include "fullmetal-config.h"
+#include "fullmetal-introspectors.h"
+
 #ifdef FM_EDITOR
 
 // include fullmetal, gui & imgui
@@ -10,32 +11,49 @@
 #include "fullmetal-gui.h"
 #include "imgui/imgui.h"
 
-void fm::SceneNode::introspect() {
-	fm::gui::introspectTransform(transform);
+void fm::gui::introspectSceneNode(SceneNode * sceneNode)
+{
+	ImGui::Text("Node");
+	ImGui::Indent();
+	ImGui::Checkbox("Enabled", &sceneNode->enabled);
+	fm::gui::guiString(sceneNode->name, "Name");
+	ImGui::Unindent();
+
+	introspectTransform(sceneNode->transform);
 }
 
-void fm::ShapeNode::introspect() {
-	SceneNode::introspect();
-	fm::gui::introspectColor(color);
+void fm::gui::introspectShapeNode(ShapeNode * sceneNode)
+{
+	introspectSceneNode(sceneNode);
+	fm::gui::introspectColor(sceneNode->color);
 }
 
-void fm::CubeNode::introspect() {
-	ShapeNode::introspect();
+void fm::gui::introspectLightNode(LightNode * lightNode)
+{
+	introspectSceneNode(lightNode);
+	fm::gui::introspectColor(lightNode->color);
 }
 
-void fm::SphereNode::introspect() {
-	ShapeNode::introspect();
+void fm::gui::introspectCubeNode(CubeNode * cubeNode)
+{
+	introspectShapeNode(cubeNode);
 }
 
-void fm::PlaneNode::introspect() {
-	ShapeNode::introspect();
+void fm::gui::introspectSphereNode(SphereNode * sphereNode)
+{
+	introspectShapeNode(sphereNode);
+}
+
+void fm::gui::introspectPlaneNode(PlaneNode * planeNode)
+{
+	introspectShapeNode(planeNode);
 
 	ImGui::Text("Plane Settings");
 	ImGui::Indent();
 
-	int w = _width;
-	int h = _height;
-	int qSize = _quadSize;
+	int w = planeNode->width();
+	int h = planeNode->height();
+	int qSize = planeNode->quadLength();
 	bool rebuild = false;
 
 	// allow for resizing of the plane, amount of quads, etc.
@@ -60,42 +78,37 @@ void fm::PlaneNode::introspect() {
 			h = 1;
 	}
 
-	// show diagnostics..
-	ImGui::LabelText("Num Tris", std::to_string(_tris.size()).c_str());
-
 	// check if we need to rebuild our quads
 	if (rebuild)
-		buildQuads(qSize, w, h);
+		planeNode->buildQuads(qSize, w, h);
 
 	ImGui::Unindent();
 }
 
-void fm::LightNode::introspect() {
-	SceneNode::introspect();
-	fm::gui::introspectColor(color);
+void fm::gui::introspectAmbientLightNode(AmbientLightNode * ambientNode)
+{
+	introspectLightNode(ambientNode);
+	fm::gui::introspectColor(ambientNode->diffuse, "Diffuse Color");
 }
 
-void fm::AmbientLightNode::introspect() {
-	LightNode::introspect();
-	fm::gui::introspectColor(diffuse, "Diffuse Color");
+void fm::gui::introspectDirectionalLightNode(DirectionalLightNode * lightNode)
+{
+	introspectLightNode(lightNode);
 }
 
-void fm::DirectionalLightNode::introspect() {
-	LightNode::introspect();
-}
+void fm::gui::introspectSpotLightNode(SpotLightNode * spotLight)
+{
+	introspectLightNode(spotLight);
 
-void fm::SpotLightNode::introspect() {
-	LightNode::introspect();
-
-	fm::gui::introspectColor(diffuse, "Diffuse Color");
+	fm::gui::introspectColor(spotLight->diffuse, "Diffuse Color");
 
 	// begin spot light properties..
 	ImGui::Text("Spot Light Settings");
 	ImGui::Indent();
 
-	fm::gui::introspectVector3(direction, "direction");
-	ImGui::InputFloat("Cutoff", &cutoff);
-	ImGui::InputFloat("Exponent", &exponent);
+	fm::gui::introspectVector3(spotLight->direction, "direction");
+	ImGui::InputFloat("Cutoff", &spotLight->cutoff);
+	ImGui::InputFloat("Exponent", &spotLight->exponent);
 
 	ImGui::Unindent();
 }

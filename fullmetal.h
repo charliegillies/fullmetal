@@ -50,6 +50,15 @@ namespace fm {
 	 */
 	void fmNormalVertex(const Vector3& normal, float x, float y, float z);
 
+	/* 
+	 * Helper for removing a specific scene node from a vector of scene nodes.
+	 */
+	bool removeNodeFromVector(SceneNode* node, std::vector<SceneNode*>& nodes);
+
+	void moveNodeUpHierarchy(SceneNode* node, SceneNodeGraph* graph);
+
+	void moveNodeDownHierarchy(SceneNode* node, SceneNodeGraph* graph);
+
 	/*
 	 * Utility to help handle 3D space.
 	 * @author Paul Robertson
@@ -253,6 +262,11 @@ namespace fm {
 		 * Gets all the nodes inside of the graph.
 		 */
 		std::vector<SceneNode*>& getNodes();
+
+		/*
+		 * Removes a node from the top-level of the scene graph.
+		 */
+		void removeNode(SceneNode* node);
 	};
 
 	/*
@@ -261,6 +275,7 @@ namespace fm {
 	class SceneNode {
 	private:
 		unsigned int _uid;
+		SceneNode* _parent;
 
 	public:
 		SceneNode();
@@ -273,6 +288,12 @@ namespace fm {
 		 * or manually set by the user.
 		 */
 		std::string name;
+
+		/*
+		 * If the node is enabled in the scene or not.
+		 * If not enabled - the node and it's children will not render.
+		 */
+		bool enabled;
 
 		/*
 		 * The transform of the node. The scene node owns this object
@@ -306,9 +327,16 @@ namespace fm {
 		 */
 		int childCount();
 
-#if FM_EDITOR
-		virtual void introspect();
-#endif
+		/*
+		 * Gets the parent node of the scene node.
+		 * Returns a nullptr if node is top-level.
+		 */
+		SceneNode* getParent();
+
+		/*
+		 * Removes a child from the child nodes.
+		 */
+		SceneNode* removeChild(SceneNode* child);
 	};
 
 	/*
@@ -322,10 +350,6 @@ namespace fm {
 		 * The color that will be drawn.
 		 */
 		Color color;
-
-#if FM_EDITOR
-		void introspect() override;
-#endif
 	};
 
 	/*
@@ -337,10 +361,6 @@ namespace fm {
 		CubeNode();
 
 		void render() override;
-
-#if FM_EDITOR
-		void introspect() override;
-#endif
 	};
 
 	/*
@@ -352,10 +372,6 @@ namespace fm {
 		SphereNode();
 
 		void render() override;
-
-#if FM_EDITOR
-		void introspect() override;
-#endif
 	};
 
 	/*
@@ -369,10 +385,6 @@ namespace fm {
 		PlaneNode();
 
 		void render() override;
-
-#if FM_EDITOR
-		void introspect() override;
-#endif
 
 		int quadLength();
 		int width();
@@ -394,10 +406,6 @@ namespace fm {
 		Color color;
 
 		LightNode(Color color);
-
-#if FM_EDITOR
-		void introspect() override;
-#endif
 	};
 
 	/*
@@ -412,10 +420,6 @@ namespace fm {
 		Color diffuse;
 
 		void render() override;
-
-#if FM_EDITOR
-		void introspect() override;
-#endif
 	};
 
 	/*
@@ -428,15 +432,11 @@ namespace fm {
 		DirectionalLightNode();
 
 		void render() override;
-
-#if FM_EDITOR
-		void introspect() override;
-#endif
 	};
 
 	/*
 	 * Spot light node, derives from Light Node.
-	 * Creates light of a certain colour from
+	 * Creates light of a certain colour.
 	 */
 	class SpotLightNode : public LightNode {
 	public:
@@ -450,10 +450,6 @@ namespace fm {
 		float exponent;
 
 		void render() override;
-
-#if FM_EDITOR
-		void introspect() override;
-#endif
 	};
 }
 #endif

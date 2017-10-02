@@ -169,12 +169,23 @@ void fm::io::SceneNode_to_json(json & j, SceneNode & node)
 	json jTransform;
 	transform_to_json(jTransform, node.transform);
 	j["transform"] = jTransform;
+
+	j["name"] = node.name;
+	j["enabled"] = node.enabled;
 }
 
 void fm::io::SceneNode_from_json(json & j, SceneNode & node)
 {
 	json& jTransform = j["transform"];
 	transform_from_json(jTransform, node.transform);
+
+	json& jName = j["name"];
+	json& jEnabled = j["enabled"];
+
+	if (!jName.is_null())
+		node.name = jName.get<std::string>();
+	if (!jEnabled.is_null())
+		node.enabled = jEnabled;
 }
 
 // SHAPE NODE TO JSON

@@ -2,6 +2,7 @@
 
 #include "fullmetal.h"
 #include "fullmetal-io.h"
+#include "fullmetal-introspectors.h"
 
 std::vector<std::string> fm::NodeTypeTable::getIds()
 {
@@ -51,6 +52,17 @@ fm::NodeTypeTable* fm::createDefaultTypeTable()
 		fm::io::DirectionalLightNode_to_json);
 
 	spot_light.set_parse_functions(fm::io::Spotlight_from_json, fm::io::SpotLight_to_json);
+#endif
+
+#ifdef FM_EDITOR
+	// if we're using the GUI, register the introspection functions for reading/writing
+	cube.set_introspection_function(fm::gui::introspectCubeNode);
+	sphere.set_introspection_function(fm::gui::introspectSphereNode);
+	plane.set_introspection_function(fm::gui::introspectPlaneNode);
+
+	ambient_light.set_introspection_function(fm::gui::introspectAmbientLightNode);
+	directional_light.set_introspection_function(fm::gui::introspectDirectionalLightNode);
+	spot_light.set_introspection_function(fm::gui::introspectSpotLightNode);
 #endif
 
 	return nodeTable;

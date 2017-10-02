@@ -22,7 +22,7 @@ GLuint textureHandle = NULL;
 
 fm::gui::GraphRenderConfig::GraphRenderConfig() : window_toggled(true), selected_node(nullptr) { }
 
-void fm::gui::renderNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable)
+void fm::gui::drawNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable)
 {
 	// Render the scene graph window
 	if (ImGui::Begin("Scene Graph##tree", &config->window_toggled)) {
@@ -30,8 +30,14 @@ void fm::gui::renderNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* conf
 #ifdef FM_IO
 		// Allow writing of the scene graph
 		if (ImGui::Button("Save##tree")) {
-			fm::io::writeSceneGraph("prototype.json", nodeGraph, typeTable);
+			fm::io::writeSceneGraph(config->filepath, nodeGraph, typeTable);
 		}
+
+		ImGui::SameLine();
+
+		// Show the filepath that we're using..
+		ImGui::Text(config->filepath.c_str());
+		ImGui::Separator();
 #endif
 
 		// Displays the number of nodes inside the scene
@@ -39,20 +45,20 @@ void fm::gui::renderNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* conf
 
 		// if we're provided with a type table, show the add option
 		if (typeTable != nullptr) {
-			renderAddNodeOptions(nodeGraph, config, typeTable);
+			drawAddNodeOptions(nodeGraph, config, typeTable);
 		}
 
 		// Begins the child-tree element of the parent window
 		if (ImGui::BeginChild("Nodes##tree", ImVec2{ 0, 250 }, true)) {
 			// render the node tree
-			renderNodes(nodeGraph->getNodes(), config);
+			drawNodes(nodeGraph->getNodes(), config);
 			ImGui::EndChild();
 		}
 
 		// Show the clicked node, if any
 		if (config->selected_node != nullptr) {
 			if (ImGui::BeginChild("Selected Node##tree", ImVec2{ }, true)) {
-				config->selected_node->introspect();
+				typeTable->introspect(config->selected_node);
 				ImGui::EndChild();
 			}
 		}
@@ -61,30 +67,70 @@ void fm::gui::renderNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* conf
 	}
 }
 
-void fm::gui::renderAddNodeOptions(SceneNodeGraph* nodeGraph, GraphRenderConfig* graphConfig, NodeTypeTable* nodeTypeTable)
+void fm::gui::drawAddNodeOptions(SceneNodeGraph* nodeGraph, GraphRenderConfig* graphConfig, NodeTypeTable* typeTable)
 {
 	static int nodeIndex = 0;
 
 	// draw all node ids
-	auto node_ids = nodeTypeTable->getIds();
+	auto node_ids = typeTable->getIds();
 	drawComboBox("Nodes", node_ids, nodeIndex);
 	std::string& id = node_ids[nodeIndex];
 
 	// draw an 'create' button, this one adds the node to the scene
 	if (ImGui::Button("Create scene node")) {
-		nodeGraph->addNode(nodeTypeTable->createNodeFromId(id));
+		nodeGraph->addNode(typeTable->createNodeFromId(id));
 	}
 
-	// if we have a selected node already, allow child node creation
+	// if we have a selected node already, allow child node creation,
+	// deleting of nodes, moving of nodes own hierarchy
 	if (graphConfig->selected_node != nullptr) {
-		ImGui::SameLine();
 
-		// this button creates the node as a child
+		// CREATE CHILD NODE
+		ImGui::SameLine();
 		if (ImGui::Button("Create child node")) {
-			graphConfig->selected_node->addChild(
-				nodeTypeTable->createNodeFromId(id)
-			);
+			graphConfig->selected_node->addChild(typeTable->createNodeFromId(id));
 		}
+
+		// DELETE NODE
+		ImGui::SameLine();
+		if (ImGui::Button("Delete node")) {
+			deleteNodeFromGraph(graphConfig, nodeGraph);
+		}
+
+		//TODO implement hiearchy traversal
+		//// DOWN IN HIERARCHY
+		//ImGui::SameLine();
+		//if (ImGui::Button("Up")) {
+
+		//}
+
+		//// UP IN HIERARCHY
+		//ImGui::SameLine();
+		//if (ImGui::Button("Down")) {
+
+		//}
+	}
+}
+
+void fm::gui::deleteNodeFromGraph(fm::gui::GraphRenderConfig * graphConfig, fm::SceneNodeGraph * nodeGraph)
+{
+	// get the parent of the selected node..
+	auto node_parent = graphConfig->selected_node->getParent();
+
+	// if no parent, it's a top level node
+	// so we need to remove it from the graph itself
+	if (node_parent == nullptr) {
+		// This removes the node but does not remove it from memory
+		nodeGraph->removeNode(graphConfig->selected_node);
+		delete graphConfig->selected_node;
+		graphConfig->selected_node = nullptr;
+	}
+	else {
+		// this means that we have a child node, so we need to remove it
+		// from the parent, rather than the graph
+		auto child = node_parent->removeChild(graphConfig->selected_node);
+		delete child;
+		graphConfig->selected_node = nullptr;
 	}
 }
 
@@ -108,14 +154,14 @@ void fm::gui::drawComboBox(std::string title, std::vector<std::string>& items, i
 	ImGui::Combo(title.c_str(), &comboIndex, getItem, reinterpret_cast<void*>(&items), items.size());
 }
 
-void fm::gui::renderNodes(std::vector<SceneNode*>& nodes, GraphRenderConfig* config)
+void fm::gui::drawNodes(std::vector<SceneNode*>& nodes, GraphRenderConfig* config)
 {
 	// Render every node in a tree order..
 	for (int i = 0; i < nodes.size(); ++i) {
 		SceneNode* node = nodes[i];
 		
 		// test if anything was clicked
-		auto clicked = renderNodeSelect(node, config);
+		auto clicked = drawNodeSelect(node, config);
 
 		// assign the node that was clicked, if any
 		if (clicked != nullptr)
@@ -123,7 +169,18 @@ void fm::gui::renderNodes(std::vector<SceneNode*>& nodes, GraphRenderConfig* con
 	}
 }
 
-fm::SceneNode* fm::gui::renderNodeSelect(SceneNode * node, GraphRenderConfig* config)
+void fm::gui::guiString(std::string & str, std::string label, int bufSize)
+{
+	std::vector<char> buf{ str.begin(), str.end() };
+	buf.resize(bufSize);
+
+	ImGui::InputText(label.c_str(), buf.data(), bufSize);
+
+	// set string to our buf data
+	str = buf.data();
+}
+
+fm::SceneNode* fm::gui::drawNodeSelect(SceneNode * node, GraphRenderConfig* config)
 {
 	int childNodeCount = node->childNodes.size();
 
@@ -152,7 +209,7 @@ fm::SceneNode* fm::gui::renderNodeSelect(SceneNode * node, GraphRenderConfig* co
 		// render all children, poll for a node selection
 		// if we select a node, test we haven't found a clicked one yet already
 		for (auto child : node->childNodes) {
-			auto n = renderNodeSelect(child, config);
+			auto n = drawNodeSelect(child, config);
 			if (n != nullptr && clicked == nullptr)
 				clicked = n;
 		}
