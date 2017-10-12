@@ -3,7 +3,7 @@ A simple extensible scene graph / level design utility for OpenGL with (optional
 
 Right now this is still in development, please check 'to do' for the list of upcoming features.
 
-
+Note: This is the public version of fullmetal and is only updated when the private branches are properly tested.
 
 ## features
 * Scene graph that uses 'SceneNodes'. Nodes can have children which forms a tree data structure.
