@@ -1,24 +1,68 @@
 #include "fullmetal.h"
 #include "glut.h"
+#include "fullmetal-3d.h"
+
 #include <math.h>
 #include <gl/GL.h>
 #include <gl/GLU.h>
 #include <cassert>
 
+void fm::clamp(int & value, int min, int max)
+{
+	if (value < min)
+		value = min;
+	else if (value > max)
+		value = max;
+}
+
+void fm::clamp(float & value, float min, float max)
+{
+	if (value < min)
+		value = min;
+	else if (value > max)
+		value = max;
+}
+
 // GL HELPERS
-void fm::fmApplyColor(Color& color)
+void fm::applyColor(Color& color)
 {
 	glColor4f(color.r, color.g, color.b, color.a);
 }
 
-void fm::fmApplyTransform(Transform& transform)
+void fm::applyMaterial(Material & mat)
+{
+	// If we're drawing double sided, draw on the front and the back
+	auto polyMode = mat.doubleSided ? GL_FRONT_AND_BACK : GL_FRONT;
+
+	// Apply the ambient color of the material 
+	float ambientColors[4] = { mat.ambientColor.r, mat.ambientColor.g, mat.ambientColor.b, mat.ambientColor.a };
+	glMaterialfv(polyMode, GL_AMBIENT, ambientColors);
+
+	// Apply the diffuse color of the material
+	float diffuseColors[4] = { mat.diffuseColor.r, mat.diffuseColor.g, mat.diffuseColor.b, mat.diffuseColor.a };
+	glMaterialfv(polyMode, GL_DIFFUSE, diffuseColors);
+
+	// Apply the specular color, if enabled.
+	if (mat.specularEnabled) {
+		float specularColor[4] = { mat.specularColor.r, mat.specularColor.g, mat.specularColor.b, mat.specularColor.a };
+		glMaterialfv(polyMode, GL_SPECULAR, specularColor);
+	}
+
+	// Apply the shininess, if enabled.
+	if (mat.shininessEnabled) {
+		float shininess[1] = { mat.shininess };
+		glMaterialfv(polyMode, GL_SHININESS, shininess);
+	}
+}
+
+void fm::applyTransform(Transform& transform)
 {
 	glRotatef(transform.angle, transform.rotation.x, transform.rotation.y, transform.rotation.z);
 	glTranslatef(transform.position.x, transform.position.y, transform.position.z);
 	glScalef(transform.scale.x, transform.scale.y, transform.scale.z);
 }
 
-void fm::fmNormalVertex(const Vector3 & normal, float x, float y, float z)
+void fm::normalVertex(const Vector3 & normal, float x, float y, float z)
 {
 	glNormal3f(normal.x, normal.y, normal.z);
 	glVertex3f(x, y, z);
@@ -266,7 +310,7 @@ float fm::Input::scrollAmount()
 }
 
 // TRANSFORM IMPLEMENTATION
-fm::Transform::Transform() : position(1, 1, 1), scale(1, 1, 1), rotation(0, 0, 0), angle(0.0f) { }
+fm::Transform::Transform() : position(0, 0, 0), scale(1, 1, 1), rotation(0, 0, 0), angle(0.0f) { }
 
 fm::Transform::Transform(Vector3 & position, Vector3 & scale, Vector3 & rotation)
 	: Transform(position, scale, rotation, 0.0f) { }
@@ -296,26 +340,36 @@ void fm::Transform::move(float x, float y, float z)
 	position.z += z;
 }
 
+// CAMERA IMPLEMENTATION
+fm::Camera::Camera() : transform() {
+
+}
+
+void fm::Camera::view() {
+	// Reset transformations
+	glLoadIdentity();
+	
+	// Set the camera
+	gluLookAt(0.0f, 0.0f, 6.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+
+	// BEGIN RENDER
+	// rotate top matrix
+	glTranslatef(-1.0f, 0.0f, 0.0f);
+	
+	// tilt top matrix
+	glRotatef(20, 1, 0, 0);
+}
 
 // COLOR IMPLEMENTATION
-fm::Color::Color(float r, float g, float b, float a) : r(r), g(g), b(b), a(a) {
-	clamp(r);
-	clamp(g);
-	clamp(b);
-	clamp(a);
-}
+fm::Color::Color(float r, float g, float b, float a) : r(r), g(g), b(b), a(a) { }
 
 fm::Color::Color(float r, float g, float b) : Color(r, g, b, 1) { }
 
 fm::Color::Color() : Color(1, 1, 1, 1) { }
 
-void fm::Color::clamp(float & v)
-{
-	if (v < 0.0f)
-		v = 0.0f;
-	else if (v > 1.0f)
-		v = 1.0f;
-}
+// MATERIAL IMPLEMENTATION
+fm::Material::Material() : diffuseColor(), ambientColor(), specularColor(), 
+	doubleSided(false), specularEnabled(false), shininess(16) { }
 
 // TRI IMPLEMENTATION
 fm::Tri::Tri() { }
@@ -411,8 +465,9 @@ void fm::SceneNode::addChild(SceneNode * child)
 
 fm::SceneNode* fm::SceneNode::removeChild(SceneNode * child)
 {
+	// try to remove node from the vector, if fail, return nullptr
 	if (!removeNodeFromVector(child, childNodes)) {
-		//TODO handle..
+		return nullptr;
 	}
 	else
 		return child;
@@ -438,7 +493,8 @@ int fm::SceneNode::childCount()
 }
 
 // SHAPE NODE IMPLEMENTATION
-fm::ShapeNode::ShapeNode(Color color) : color(color) {
+fm::ShapeNode::ShapeNode(Color color) {
+	material.ambientColor = color;
 	name = "Shape Node";
 }
 
@@ -452,57 +508,57 @@ fm::CubeNode::CubeNode() : CubeNode(Color(1, 1, 1, 1)) { }
 void fm::CubeNode::render()
 {
 	glPushMatrix();
-	fmApplyTransform(transform);
-	fmApplyColor(color);
+	applyTransform(transform);
+	applyMaterial(material);
 
 	glBegin(GL_QUADS);
 
 		//Front
 		const Vector3 frontNormal(0.0f, 0.0f, 1.0f);
-		fmNormalVertex(frontNormal, -1.0f, -1.0f, 1.0f);
-		fmNormalVertex(frontNormal, 1.0f, -1.0f, 1.0f);
-		fmNormalVertex(frontNormal, 1.0f, 1.0f, 1.0f);
-		fmNormalVertex(frontNormal, -1.0f, 1.0f, 1.0f);
+		normalVertex(frontNormal, -1.0f, -1.0f, 1.0f);
+		normalVertex(frontNormal, 1.0f, -1.0f, 1.0f);
+		normalVertex(frontNormal, 1.0f, 1.0f, 1.0f);
+		normalVertex(frontNormal, -1.0f, 1.0f, 1.0f);
 
 		// Right
 		//fmColor(Color(0.5f, 0.0f, 0.5f, 1.0f));
 		const Vector3 rightNormal(1.0f, 0.0f, 0.0f);
-		fmNormalVertex(rightNormal, 1.0f, -1.0f, -1.0f);
-		fmNormalVertex(rightNormal, 1.0f, 1.0f, -1.0f);
-		fmNormalVertex(rightNormal, 1.0f, 1.0f, 1.0f);
-		fmNormalVertex(rightNormal, 1.0f, -1.0f, 1.0f);
+		normalVertex(rightNormal, 1.0f, -1.0f, -1.0f);
+		normalVertex(rightNormal, 1.0f, 1.0f, -1.0f);
+		normalVertex(rightNormal, 1.0f, 1.0f, 1.0f);
+		normalVertex(rightNormal, 1.0f, -1.0f, 1.0f);
 
 		// Bottom
 		//fmColor(Color(0.0f, 0.5f, 0.5f, 1.0f));
 		const Vector3 bottomNormal(0.0f, -1.0f, 0.0f);
-		fmNormalVertex(bottomNormal, 1.0f, -1.0f, 1.0f);
-		fmNormalVertex(bottomNormal, 1.0f, -1.0f, -1.0f);
-		fmNormalVertex(bottomNormal, -1.0f, -1.0f, -1.0f);
-		fmNormalVertex(bottomNormal, -1.0f, -1.0f, 1.0f);
+		normalVertex(bottomNormal, 1.0f, -1.0f, 1.0f);
+		normalVertex(bottomNormal, 1.0f, -1.0f, -1.0f);
+		normalVertex(bottomNormal, -1.0f, -1.0f, -1.0f);
+		normalVertex(bottomNormal, -1.0f, -1.0f, 1.0f);
 
 		// Left
 		//fmColor(Color(0.0f, 0, 1, 1.0f));
 		const Vector3 leftNormal(-1.0f, 0.0f, 0.0f);
-		fmNormalVertex(leftNormal, -1.0f, -1.0f, 1.0f);
-		fmNormalVertex(leftNormal, -1.0f, -1.0f, -1.0f);
-		fmNormalVertex(leftNormal, -1.0f, 1.0f, -1.0f);
-		fmNormalVertex(leftNormal, -1.0f, 1.0f, 1.0f);
+		normalVertex(leftNormal, -1.0f, -1.0f, 1.0f);
+		normalVertex(leftNormal, -1.0f, -1.0f, -1.0f);
+		normalVertex(leftNormal, -1.0f, 1.0f, -1.0f);
+		normalVertex(leftNormal, -1.0f, 1.0f, 1.0f);
 
 		// Top
 		//fmColor(Color(0.0f, 1, 0, 1.0f));
 		const Vector3 topNormal(0, 1, 0);
-		fmNormalVertex(topNormal, -1.0f, 1.0f, 1.0f);
-		fmNormalVertex(topNormal, 1.0f, 1.0f, 1.0f);
-		fmNormalVertex(topNormal, 1.0f, 1.0f, -1.0f);
-		fmNormalVertex(topNormal, -1.0f, 1.0f, -1.0f);
+		normalVertex(topNormal, -1.0f, 1.0f, 1.0f);
+		normalVertex(topNormal, 1.0f, 1.0f, 1.0f);
+		normalVertex(topNormal, 1.0f, 1.0f, -1.0f);
+		normalVertex(topNormal, -1.0f, 1.0f, -1.0f);
 
 		// Back
 		//fmColor(Color(1.0f, 0, 0, 1.0f));
 		const Vector3 backNormal(0, 0, -1);
-		fmNormalVertex(backNormal, -1.0f, -1.0f, -1.0f);
-		fmNormalVertex(backNormal, 1.0f, -1.0f, -1.0f);
-		fmNormalVertex(backNormal, 1.0f, 1.0f, -1.0f);
-		fmNormalVertex(backNormal, -1.0f, 1.0f, -1.0f);
+		normalVertex(backNormal, -1.0f, -1.0f, -1.0f);
+		normalVertex(backNormal, 1.0f, -1.0f, -1.0f);
+		normalVertex(backNormal, 1.0f, 1.0f, -1.0f);
+		normalVertex(backNormal, -1.0f, 1.0f, -1.0f);
 
 	glEnd();
 
@@ -515,17 +571,29 @@ void fm::CubeNode::render()
 // SPHERE NODE IMPLEMENTATION
 fm::SphereNode::SphereNode(Color color) : ShapeNode(color) {
 	name = "Sphere Node";
+	_slices = 20;
+	_stacks = 20;
 }
 
 fm::SphereNode::SphereNode() : SphereNode(Color(1, 1, 1, 1)) { }
 
+int & fm::SphereNode::getSlices()
+{
+	return _slices;
+}
+
+int & fm::SphereNode::getStacks()
+{
+	return _stacks;
+}
+
 void fm::SphereNode::render()
 {
 	glPushMatrix();
-	fmApplyTransform(transform);
-	fmApplyColor(color);
+	applyTransform(transform);
+	applyMaterial(material);
 
-		gluSphere(gluNewQuadric(), 1, 20, 20);
+	gluSphere(gluNewQuadric(), 1, _slices, _stacks);
 
 	SceneNode::render();
 	glPopMatrix();
@@ -542,17 +610,20 @@ fm::PlaneNode::PlaneNode() : PlaneNode(Color(1, 1, 1, 1), 4, 1, 1) { }
 void fm::PlaneNode::render()
 {
 	glPushMatrix();
-	fmApplyTransform(transform);
-	fmApplyColor(color);
+	applyTransform(transform);
+	applyMaterial(material);
 
 	glBegin(GL_TRIANGLES);
+
+	// On a plane, all normals face up.
+	static const Vector3 planeNormal = Vector3(0, 1, 0);
 
 	// now write every triangle we built with buildQuads()
 	for (int i = 0; i < _tris.size(); ++i) {
 		Tri& tri = _tris[i];
-		glVertex3d(tri.v1.x, tri.v1.y, tri.v1.z);
-		glVertex3d(tri.v2.x, tri.v2.y, tri.v2.z);
-		glVertex3d(tri.v3.x, tri.v3.y, tri.v3.z);
+		normalVertex(planeNormal, tri.v1.x, tri.v1.y, tri.v1.z);
+		normalVertex(planeNormal, tri.v2.x, tri.v2.y, tri.v2.z);
+		normalVertex(planeNormal, tri.v3.x, tri.v3.y, tri.v3.z);
 	}
 	
 	glEnd();
@@ -585,12 +656,19 @@ void fm::PlaneNode::buildQuads(int size, int width, int height)
 
 	_tris.clear();
 
+	float x_offset = (size * width) / 2;
+	float y_offset = (size * height) / 2;
+
 	for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
-			Vector3 v1 = Vector3(x, 0, y);
-			Vector3 v2 = Vector3(x + size, 0, y);
-			Vector3 v3 = Vector3(x + size, 0, y + size);
-			Vector3 v4 = Vector3(x, 0, y + size);
+
+			float x_pos = (float)x - x_offset;
+			float y_pos = (float)y - y_offset;
+
+			Vector3 v1 = Vector3(x_pos, 0, y_pos);
+			Vector3 v2 = Vector3(x_pos + (float)size, 0, y_pos);
+			Vector3 v3 = Vector3(x_pos + (float)size, 0, y_pos + (float)size);
+			Vector3 v4 = Vector3(x_pos, 0, y_pos + (float)size);
 
 			Tri tri1 = Tri(v1, v3, v4); //v1 v2 v4 make up the top left part
 			Tri tri2 = Tri(v1, v2, v3); //v1 v2 v3 make up the bottom right part
@@ -678,4 +756,44 @@ void fm::SpotLightNode::render()
 	glLightfv(GL_LIGHT2, GL_SPOT_DIRECTION, spot_direction);
 	glLightf(GL_LIGHT2, GL_SPOT_EXPONENT, exponent);
 	glEnable(GL_LIGHT2);
+}
+
+// MESH NODE IMPLEMENTATION
+fm::MeshNode::MeshNode() : model(nullptr), material() { 
+	name = "Mesh Node";
+}
+
+fm::MeshNode::MeshNode(std::string modelPath) : MeshNode() {
+	model = loadObjModel(modelPath);
+}
+
+void fm::MeshNode::render()
+{
+	glPushMatrix();
+	applyTransform(transform);
+	applyMaterial(material);
+
+	// if the model hasn't been loaded yet, nothing to render.
+	if (model != nullptr) {
+		glBegin(GL_POLYGON);
+
+		// for every face of the model..
+		for (auto& face : model->polyFaces) {
+			// get the indexes to the vertex/tex/normal
+			for (auto& index : face.indices) {
+				// indexes in obj models start at 1, not 0, so remove 1
+				auto& vertex = model->vertices[index.vertexIndex - 1];
+				auto& normal = model->vertexNormals[index.normalIndex - 1];
+				
+				// draw the normal and vertex
+				normalVertex(normal, vertex.x, vertex.y, vertex.z);
+			}
+		}
+
+		glEnd();
+	}
+	
+	SceneNode::render();
+
+	glPopMatrix();
 }

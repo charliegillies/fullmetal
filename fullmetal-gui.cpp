@@ -227,26 +227,18 @@ void fm::gui::introspectColor(Color & color, std::string title)
 	ImGui::Text(title.c_str());
 	ImGui::Indent();
 
-	ImGui::DragFloat("R", &color.r, 0.0025f, 0.0f, 1.0f);
-	ImGui::DragFloat("G", &color.g, 0.0025f, 0.0f, 1.0f);
-	ImGui::DragFloat("B", &color.b, 0.0025f, 0.0f, 1.0f);
-	ImGui::DragFloat("A", &color.a, 0.0025f, 0.0f, 1.0f);
+	// An array of all our color values
+	float colValues[4] = { color.r, color.g, color.b, color.a };
 
-	//// translate opengl color (0-1.0f) to imColor (0-255)
-	//int r = (int)(color.r*255.0f);
-	//int g = (int)(color.g*255.0f);
-	//int b = (int)(color.b*255.0f);
-	//int a = (int)(color.a*255.0f);
-
-	//ImColor imcolor = ImColor(r, g, b, a);
-
-	//if (ImGui::ColorPicker3("Color", (float*)&imcolor)) {
-	//	color.r = imcolor.Value.x / 255.0f;
-	//	color.g = imcolor.Value.y / 255.0f;
-	//	color.b = imcolor.Value.z / 255.0f;
-	//	color.a = imcolor.Value.w / 255.0f;
-	//}
-
+	// Display the colour 
+	if (ImGui::ColorEdit4("Color", colValues)) {
+		// Reassign the colour
+		color.r = colValues[0];
+		color.g = colValues[1];
+		color.b = colValues[2];
+		color.a = colValues[3];
+	}
+	
 	ImGui::Unindent();
 }
 
@@ -285,6 +277,46 @@ void fm::gui::introspectVector3(Vector3 & vector, std::string label)
 	ImGui::NextColumn();
 
 	ImGui::Columns(1, nullptr, false);
+}
+
+void fm::gui::introspectMaterial(Material & material)
+{
+	ImGui::Text("Material");
+	ImGui::Indent();
+
+	ImGui::Checkbox("Double Sided", &material.doubleSided);
+
+	// introspect ambient color
+	ImGui::PushID("Mat Ambient Color");
+	introspectColor(material.ambientColor, "Ambient Color");
+	ImGui::PopID();
+
+	// introspect diffuse color
+	ImGui::PushID("Mat Diffuse Color");
+	introspectColor(material.diffuseColor, "Diffuse Color");
+	ImGui::PopID();
+
+	// introspect shininess value
+	ImGui::PushID("Mat Shininess");
+	ImGui::Checkbox("Shininess Enabled", &material.shininessEnabled);
+	ImGui::Indent();
+
+	if (material.shininessEnabled)
+		ImGui::InputFloat("Shininess", &material.shininess);
+
+	ImGui::Unindent();
+	ImGui::PopID();
+
+	// introspect specular color
+	ImGui::PushID("Mat Specular Color");
+	ImGui::Checkbox("Specular Enabled", &material.specularEnabled);
+
+	if (material.specularEnabled)
+		introspectColor(material.specularColor, "Specular Color");
+	
+	ImGui::PopID();
+
+	ImGui::Unindent();
 }
 
 void fm::gui::startGui(int width, int height)

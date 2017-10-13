@@ -9,6 +9,7 @@
 // include fullmetal, gui & imgui
 #include "fullmetal.h"
 #include "fullmetal-gui.h"
+#include "fullmetal-3d.h"
 #include "imgui/imgui.h"
 
 void fm::gui::introspectSceneNode(SceneNode * sceneNode)
@@ -25,13 +26,17 @@ void fm::gui::introspectSceneNode(SceneNode * sceneNode)
 void fm::gui::introspectShapeNode(ShapeNode * sceneNode)
 {
 	introspectSceneNode(sceneNode);
-	fm::gui::introspectColor(sceneNode->color);
+	fm::gui::introspectMaterial(sceneNode->material);
+	//fm::gui::introspectColor(sceneNode->color);
 }
 
 void fm::gui::introspectLightNode(LightNode * lightNode)
 {
 	introspectSceneNode(lightNode);
+
+	ImGui::PushID("LightNode Color");
 	fm::gui::introspectColor(lightNode->color);
+	ImGui::PopID();
 }
 
 void fm::gui::introspectCubeNode(CubeNode * cubeNode)
@@ -42,6 +47,22 @@ void fm::gui::introspectCubeNode(CubeNode * cubeNode)
 void fm::gui::introspectSphereNode(SphereNode * sphereNode)
 {
 	introspectShapeNode(sphereNode);
+
+	ImGui::Text("Sphere");
+	ImGui::Indent();
+
+	int& slices = sphereNode->getSlices();
+	int& stacks = sphereNode->getStacks();
+
+	if (ImGui::InputInt("Slices", &slices)) {
+		clamp(slices, 1, 100);
+	}
+
+	if (ImGui::InputInt("Stacks", &stacks)) {
+		clamp(stacks, 1, 100);
+	}
+
+	ImGui::Unindent();
 }
 
 void fm::gui::introspectPlaneNode(PlaneNode * planeNode)
@@ -109,6 +130,27 @@ void fm::gui::introspectSpotLightNode(SpotLightNode * spotLight)
 	fm::gui::introspectVector3(spotLight->direction, "direction");
 	ImGui::InputFloat("Cutoff", &spotLight->cutoff);
 	ImGui::InputFloat("Exponent", &spotLight->exponent);
+
+	ImGui::Unindent();
+}
+
+void fm::gui::introspectMeshNode(MeshNode * meshNode)
+{
+	introspectSceneNode(meshNode);
+	fm::gui::introspectMaterial(meshNode->material);
+
+	ImGui::Text("Mesh Node Properties");
+	ImGui::Indent();
+
+	ObjModel* model = meshNode->model;
+	
+	// if model loaded, show the amount of faces imported.
+	if (model != nullptr) {
+		ImGui::LabelText("Faces", std::to_string(model->polyFaces.size()).c_str());
+	}
+	else {
+
+	}
 
 	ImGui::Unindent();
 }

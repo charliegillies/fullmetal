@@ -16,6 +16,7 @@ namespace fm
 	class AmbientLightNode;
 	class DirectionalLightNode;
 	class SpotLightNode;
+	class MeshNode;
 
 	class Transform;
 	class Vector3;
@@ -40,6 +41,8 @@ namespace fm
 		void introspectDirectionalLightNode(DirectionalLightNode* lightNode);
 
 		void introspectSpotLightNode(SpotLightNode* spotLight);
+
+		void introspectMeshNode(MeshNode* meshNode);
 	}
 }
 

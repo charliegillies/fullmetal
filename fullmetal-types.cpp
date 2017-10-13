@@ -38,20 +38,25 @@ fm::NodeTypeTable* fm::createDefaultTypeTable()
 	auto& ambient_light = nodeTable->registerNode<fm::AmbientLightNode>("AmbientLightNode");
 	auto& directional_light = nodeTable->registerNode<fm::DirectionalLightNode>("DirectionalLightNode");
 	auto& spot_light = nodeTable->registerNode<fm::SpotLightNode>("SpotLightNode");
-	
+
+	// 3d model nodes
+	auto& mesh_node = nodeTable->registerNode<fm::MeshNode>("MeshNode");
+
 #ifdef FM_IO
 	// if we're using IO, register the parse functions for reading/writing the nodes.
-	cube.set_parse_functions(fm::io::CubeNode_from_json, fm::io::CubeNode_to_json);
-	sphere.set_parse_functions(fm::io::SphereNode_from_json, fm::io::SphereNode_to_json);
-	plane.set_parse_functions(fm::io::PlaneNode_from_json, fm::io::PlaneNode_to_json);
+	cube.set_parse_functions(fm::io::readCubeNode, fm::io::writeCubeNode);
+	sphere.set_parse_functions(fm::io::readSphereNode, fm::io::writeSphereNode);
+	plane.set_parse_functions(fm::io::readPlaneNode, fm::io::writePlaneNode);
 
-	ambient_light.set_parse_functions(fm::io::AmbientLightNode_from_json, 
-		fm::io::AmbientLightNode_to_json);
+	ambient_light.set_parse_functions(fm::io::readAmbientLightNode, 
+		fm::io::writeAmbientLightNode);
 
-	directional_light.set_parse_functions(fm::io::DirectionalLightNode_from_json, 
-		fm::io::DirectionalLightNode_to_json);
+	directional_light.set_parse_functions(fm::io::readDirectionalLightNode, 
+		fm::io::writeDirectionalLightNode);
 
-	spot_light.set_parse_functions(fm::io::Spotlight_from_json, fm::io::SpotLight_to_json);
+	spot_light.set_parse_functions(fm::io::readSpotLightNode, fm::io::writeSpotLightNode);
+
+	mesh_node.set_parse_functions(fm::io::readMeshNode, fm::io::writeMeshNode);
 #endif
 
 #ifdef FM_EDITOR
@@ -63,6 +68,8 @@ fm::NodeTypeTable* fm::createDefaultTypeTable()
 	ambient_light.set_introspection_function(fm::gui::introspectAmbientLightNode);
 	directional_light.set_introspection_function(fm::gui::introspectDirectionalLightNode);
 	spot_light.set_introspection_function(fm::gui::introspectSpotLightNode);
+
+	mesh_node.set_introspection_function(fm::gui::introspectMeshNode);
 #endif
 
 	return nodeTable;

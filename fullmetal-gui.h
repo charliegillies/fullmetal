@@ -18,8 +18,9 @@ namespace fm {
 	class SceneNodeGraph;
 	class SceneNode;
 	class Transform;
-	struct Vector3;
+	class Vector3;
 	struct Color;
+	struct Material;
 
 	namespace gui {
 		/*
@@ -96,6 +97,11 @@ namespace fm {
 		 * Renders a vector3 (x, y, z) using ImGui
 		 */
 		void introspectVector3(Vector3& vector, std::string label);
+
+		/*
+		 * Introspects a materials properties.
+		 */
+		void introspectMaterial(Material& material);
 
 		/*
 		 * Initializes the gui.

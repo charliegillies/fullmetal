@@ -4,7 +4,9 @@
 
 #include "fullmetal.h"
 #include "fullmetal-types.h"
+#include "fullmetal-3d.h"
 #include "json.hpp"
+
 #include <fstream>
 
 void fm::io::writeJson(std::string & file, nlohmann::json & j)
@@ -112,42 +114,42 @@ fm::SceneNode* fm::io::readNode(nlohmann::json & json, NodeTypeTable * typeTable
 	return node;
 }
 
-void fm::io::transform_to_json(json & json, Transform & transform)
+void fm::io::writeTransform(json & json, Transform & transform)
 {
-	vector3_to_json(json["position"], transform.position);
-	vector3_to_json(json["scale"], transform.scale);
-	vector3_to_json(json["rotation"], transform.rotation);
+	writeVector3(json["position"], transform.position);
+	writeVector3(json["scale"], transform.scale);
+	writeVector3(json["rotation"], transform.rotation);
 	json["angle"] = transform.angle;
 }
 
-void fm::io::transform_from_json(json & json, Transform & transform)
+void fm::io::readTransform(json & json, Transform & transform)
 {
 	auto& pos = json["position"];
 	auto& scale = json["scale"];
 	auto& rot = json["rotation"];
 	auto& angle = json["angle"];
 
-	vector3_from_json(pos, transform.position);
-	vector3_from_json(scale, transform.scale);
-	vector3_from_json(rot, transform.rotation);
+	readVector3(pos, transform.position);
+	readVector3(scale, transform.scale);
+	readVector3(rot, transform.rotation);
 	transform.angle = angle.get<float>();
 }
 
-void fm::io::vector3_to_json(json & json, Vector3 & vec)
+void fm::io::writeVector3(json & json, Vector3 & vec)
 {
 	json["x"] = (float)vec.x;
 	json["y"] = (float)vec.y;
 	json["z"] = (float)vec.z;
 }
 
-void fm::io::vector3_from_json(json & json, Vector3 & vec)
+void fm::io::readVector3(json & json, Vector3 & vec)
 {
 	vec.x = json.at("x").get<float>();
 	vec.y = json.at("y").get<float>();
 	vec.z = json.at("z").get<float>();
 }
 
-void fm::io::color_to_json(json & json, Color & color)
+void fm::io::writeColor(json & json, Color & color)
 {
 	json["r"] = (float)color.r;
 	json["g"] = (float)color.g;
@@ -155,7 +157,7 @@ void fm::io::color_to_json(json & json, Color & color)
 	json["a"] = (float)color.a;
 }
 
-void fm::io::color_from_json(json & json, Color & color)
+void fm::io::readColor(json & json, Color & color)
 {
 	color.r = json.at("r").get<float>();
 	color.g = json.at("g").get<float>();
@@ -163,21 +165,68 @@ void fm::io::color_from_json(json & json, Color & color)
 	color.a = json.at("a").get<float>();
 }
 
+void fm::io::writeMaterial(json & j, Material & material)
+{
+	json ambColorJson = json::object();
+	json difColorJson = json::object();
+	json specColorJson;
+	json shininessJson;
+
+	writeColor(ambColorJson, material.ambientColor);
+	writeColor(difColorJson, material.diffuseColor);
+
+	if (material.specularEnabled) {
+		specColorJson = json::object();
+		writeColor(specColorJson, material.specularColor);
+	}
+
+	if (material.shininessEnabled) {
+		shininessJson = json::object();
+		shininessJson = material.shininess;
+	}
+
+	j["ambColor"] = ambColorJson;
+	j["difColor"] = difColorJson;
+	j["specColor"] = specColorJson; // could be null
+	j["shininess"] = shininessJson; // could be null
+}
+
+void fm::io::readMaterial(json & j, Material & material)
+{
+	json ambColorJson = j["ambColor"];
+	json difColorJson = j["difColor"];
+	json specColorJson = j["specColor"];
+	json shininessJson = j["shininess"];
+
+	readColor(ambColorJson, material.ambientColor);
+	readColor(difColorJson, material.diffuseColor);
+
+	if (!specColorJson.is_null()) {
+		material.specularEnabled = true;
+		readColor(specColorJson, material.specularColor);
+	}
+
+	if (!shininessJson.is_null()) {
+		material.shininessEnabled = true;
+		material.shininess = shininessJson;
+	}
+}
+
 // SCENE NODE TO JSON
-void fm::io::SceneNode_to_json(json & j, SceneNode & node)
+void fm::io::writeSceneNode(json & j, SceneNode & node)
 {
 	json jTransform;
-	transform_to_json(jTransform, node.transform);
+	writeTransform(jTransform, node.transform);
 	j["transform"] = jTransform;
 
 	j["name"] = node.name;
 	j["enabled"] = node.enabled;
 }
 
-void fm::io::SceneNode_from_json(json & j, SceneNode & node)
+void fm::io::readSceneNode(json & j, SceneNode & node)
 {
 	json& jTransform = j["transform"];
-	transform_from_json(jTransform, node.transform);
+	readTransform(jTransform, node.transform);
 
 	json& jName = j["name"];
 	json& jEnabled = j["enabled"];
@@ -189,137 +238,186 @@ void fm::io::SceneNode_from_json(json & j, SceneNode & node)
 }
 
 // SHAPE NODE TO JSON
-void fm::io::ShapeNode_to_json(json & j, ShapeNode & shape)
+void fm::io::writeShapeNode(json & j, ShapeNode & shape)
 {
-	json jColor;
-	color_to_json(jColor, shape.color);
-	j["color"] = jColor;
+	json jMaterial = json::object();
+	writeMaterial(jMaterial, shape.material);
+	j["material"] = jMaterial;
 }
 
-void fm::io::ShapeNode_from_json(json & j, ShapeNode & shape)
+void fm::io::readShapeNode(json & j, ShapeNode & shape)
 {
-	json& jColor = j["color"];
-	color_from_json(jColor, shape.color);
+	readMaterial(j["material"], shape.material);
 }
 
 // CUBE NODE TO JSON
-void fm::io::CubeNode_to_json(json & j, CubeNode & cube)
+void fm::io::writeCubeNode(json & j, CubeNode & cube)
 {
-	SceneNode_to_json(j, cube);
-	ShapeNode_to_json(j, cube);
+	writeSceneNode(j, cube);
+	writeShapeNode(j, cube);
 }
 
-void fm::io::CubeNode_from_json(json & j, CubeNode & cube)
+void fm::io::readCubeNode(json & j, CubeNode & cube)
 {
-	SceneNode_from_json(j, cube);
-	ShapeNode_from_json(j, cube);
+	readSceneNode(j, cube);
+	readShapeNode(j, cube);
 }
 
 // SPHERE NODE TO JSON
-void fm::io::SphereNode_to_json(json & j, SphereNode & sphere)
+void fm::io::writeSphereNode(json & j, SphereNode & sphere)
 {
-	SceneNode_to_json(j, sphere);
-	ShapeNode_to_json(j, sphere);
+	writeSceneNode(j, sphere);
+	writeShapeNode(j, sphere);
+
+	j["stacks"] = sphere.getStacks();
+	j["slices"] = sphere.getSlices();
 }
 
-void fm::io::SphereNode_from_json(json & j, SphereNode & sphere)
+void fm::io::readSphereNode(json & j, SphereNode & sphere)
 {
-	SceneNode_from_json(j, sphere);
-	ShapeNode_from_json(j, sphere);
+	readSceneNode(j, sphere);
+	readShapeNode(j, sphere);
+
+	int& stacks = sphere.getStacks();
+	int& slices = sphere.getSlices();
+	stacks = j["stacks"];
+	slices = j["slices"];
 }
 
 // PLANE NODE TO JSON
-void fm::io::PlaneNode_to_json(json & j, PlaneNode & plane)
+void fm::io::writePlaneNode(json & j, PlaneNode & plane)
 {
-	SceneNode_to_json(j, plane);
-	ShapeNode_to_json(j, plane);
+	writeSceneNode(j, plane);
+	writeShapeNode(j, plane);
 
 	j["width"] = plane.width();
 	j["height"] = plane.height();
 	j["quadSize"] = plane.quadLength();
 }
 
-void fm::io::PlaneNode_from_json(json & j, PlaneNode & plane)
+void fm::io::readPlaneNode(json & j, PlaneNode & plane)
 {
-	SceneNode_from_json(j, plane);
-	ShapeNode_from_json(j, plane);
+	readSceneNode(j, plane);
+	readShapeNode(j, plane);
 	plane.buildQuads(j["quadSize"], j["width"], j["height"]);
 }
 
 // LIGHT NODE TO JSON
-void fm::io::LightNode_to_json(json & j, LightNode & light)
+void fm::io::writeLightNode(json & j, LightNode & light)
 {
 	json jColor;
-	color_to_json(jColor, light.color);
+	writeColor(jColor, light.color);
 	j["color"] = jColor;
 }
 
-void fm::io::LightNode_from_json(json & j, LightNode & light)
+void fm::io::readLightNode(json & j, LightNode & light)
 {
 	json& jColor = j["color"];
-	color_from_json(jColor, light.color);
+	readColor(jColor, light.color);
 }
 
 // AMBIENT LIGHT NODE TO JSON
-void fm::io::AmbientLightNode_to_json(json & j, AmbientLightNode & ambientLight)
+void fm::io::writeAmbientLightNode(json & j, AmbientLightNode & ambientLight)
 {
-	SceneNode_to_json(j, ambientLight);
-	LightNode_to_json(j, ambientLight);
+	writeSceneNode(j, ambientLight);
+	writeLightNode(j, ambientLight);
 
 	json jDiffuse;
-	color_to_json(jDiffuse, ambientLight.diffuse);
+	writeColor(jDiffuse, ambientLight.diffuse);
 	j["diffuse"] = jDiffuse;
 }
 
-void fm::io::AmbientLightNode_from_json(json & j, AmbientLightNode & ambientLight)
+void fm::io::readAmbientLightNode(json & j, AmbientLightNode & ambientLight)
 {
-	SceneNode_from_json(j, ambientLight);
-	LightNode_from_json(j, ambientLight);
+	readSceneNode(j, ambientLight);
+	readLightNode(j, ambientLight);
 
-	color_from_json(j["diffuse"], ambientLight.diffuse);
+	readColor(j["diffuse"], ambientLight.diffuse);
 }
 
 // DIRECTIONAL LIGHT TO JSON
-void fm::io::DirectionalLightNode_to_json(json & j, DirectionalLightNode & directionalLight)
+void fm::io::writeDirectionalLightNode(json & j, DirectionalLightNode & directionalLight)
 {
-	SceneNode_to_json(j, directionalLight);
-	LightNode_to_json(j, directionalLight);
+	writeSceneNode(j, directionalLight);
+	writeLightNode(j, directionalLight);
 }
 
-void fm::io::DirectionalLightNode_from_json(json & j, DirectionalLightNode & directionalLight)
+void fm::io::readDirectionalLightNode(json & j, DirectionalLightNode & directionalLight)
 {
-	SceneNode_from_json(j, directionalLight);
-	LightNode_from_json(j, directionalLight);
+	readSceneNode(j, directionalLight);
+	readLightNode(j, directionalLight);
 }
 
 // SPOTLIGHT TO JSON
-void fm::io::SpotLight_to_json(json & j, SpotLightNode & spotLight)
+void fm::io::writeSpotLightNode(json & j, SpotLightNode & spotLight)
 {
-	SceneNode_to_json(j, spotLight);
-	LightNode_to_json(j, spotLight);
+	writeSceneNode(j, spotLight);
+	writeLightNode(j, spotLight);
 
 	j["cutoff"] = spotLight.cutoff;
 	j["exponent"] = spotLight.exponent;
 
 	json jDirection;
-	vector3_to_json(jDirection, spotLight.direction);
+	writeVector3(jDirection, spotLight.direction);
 	j["direction"] = jDirection;
 
 	json jDiffuse;
-	color_to_json(jDiffuse, spotLight.diffuse);
+	writeColor(jDiffuse, spotLight.diffuse);
 	j["diffuse"] = jDiffuse;
 }
 
-void fm::io::Spotlight_from_json(json & j, SpotLightNode & spotLight)
+void fm::io::readSpotLightNode(json & j, SpotLightNode & spotLight)
 {
-	SceneNode_from_json(j, spotLight);
-	LightNode_from_json(j, spotLight);
+	readSceneNode(j, spotLight);
+	readLightNode(j, spotLight);
 
 	spotLight.cutoff = j["cutoff"];
 	spotLight.exponent = j["exponent"];
 
-	vector3_to_json(j["direction"], spotLight.direction);
-	color_to_json(j["diffuse"], spotLight.diffuse);
+	writeVector3(j["direction"], spotLight.direction);
+	writeColor(j["diffuse"], spotLight.diffuse);
+}
+
+void fm::io::writeObjModel(json & j, ObjModel* model)
+{
+	j["filepath"] = model->filepath;
+}
+
+void fm::io::readObjModel(json & j, ObjModel** model)
+{
+	// get the filepath, load the obj model from it
+	std::string filepath = j["filepath"];
+	ObjModel* m = loadObjModel(filepath);
+	*model = m;
+}
+
+void fm::io::writeMeshNode(json & j, MeshNode & meshNode)
+{
+	writeSceneNode(j, meshNode);
+
+	json jMaterial = json::object();
+	writeMaterial(jMaterial, meshNode.material);
+	j["material"] = jMaterial;
+
+	json jModel;
+	if (meshNode.model != nullptr) {
+		jModel = json::object();
+		writeObjModel(jModel, meshNode.model);
+	}
+
+	j["model"] = jModel;
+}
+
+void fm::io::readMeshNode(json & j, MeshNode & meshNode)
+{
+	readSceneNode(j, meshNode);
+
+	readMaterial(j["material"], meshNode.material);
+
+	json& jModel = j["model"];
+	if (!jModel.is_null()) {
+		readObjModel(jModel, &meshNode.model);
+	}
 }
 
 #endif // END

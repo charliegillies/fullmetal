@@ -7,14 +7,10 @@
 
  * TODO:
 	* Find a way to dynamically handle light id assignment (0-7)
-	* Possibly implement a simple ImGui for viewing the nodes.
-	* Possibly find a way to read/write the nodes to/from JSON. 
 	* Implement a camera with utilities. NOT a scene node.
-	* Allow deletion of nodes in the scene graph, including children.
 	* Implement sorting for SceneNodes so we can put lighting first.
-	* Draw normals for custom shapes (quad, tri, etc)
 
- * GitHub Repo: ??
+ * GitHub Repo: https://github.com/charliegillies/fullmetal
  * Author: Charlie Gillies
  * Start Date: 19.09.2017
  */
@@ -32,23 +28,34 @@ namespace fm {
 	class Vector3;
 	class Input;
 	class Transform;
+	class Camera;
 	class SceneNodeGraph;
 	class SceneNode;
+	struct Material;
+	struct ObjModel;
+
+	void clamp(int& value, int min, int max);
+	void clamp(float& value, float min, float max);
 
 	/*
 	 * Shortcut to call glColor4f(color.r, color.g, color.b, color.a).
 	 */
-	void fmApplyColor(Color& color);
+	void applyColor(Color& color);
+
+	/*
+	 * Shortcut to apply a material in OpenGL.
+	 */
+	void applyMaterial(Material& material);
 
 	/*
 	 * Shortcut to apply the transform in OpenGL.
 	 */
-	void fmApplyTransform(Transform& transform);
+	void applyTransform(Transform& transform);
 
 	/*
 	 * Shortcut to call glNormal(normal.x, normal.y, normal.z) and glVertex(x, y, z).
 	 */
-	void fmNormalVertex(const Vector3& normal, float x, float y, float z);
+	void normalVertex(const Vector3& normal, float x, float y, float z);
 
 	/* 
 	 * Helper for removing a specific scene node from a vector of scene nodes.
@@ -203,6 +210,24 @@ namespace fm {
 		 */
 		void move(float x, float y, float z);
 	};
+	
+	/*
+	 * Handles the viewport, frustrum, etc.
+	 */
+	class Camera {
+	public:
+		Camera();
+
+		/*
+		 * 
+		 */
+		Transform transform;
+
+		/*
+		 * 
+		 */
+		void view();
+	};
 
 	/*
 	 * Represents an opengl color.
@@ -212,12 +237,52 @@ namespace fm {
 		Color(float r, float g, float b);
 		Color();
 
-		void clamp(float& v);
-
 		float r;
 		float g;
 		float b;
 		float a;
+	};
+
+	/*
+	 * Represents the material of an object.
+	 */
+	struct Material {
+		Material();
+		
+		/*
+		 * The overall colour of the object, is effected by the ambient light in the scene.
+		 */
+		Color ambientColor;
+		
+		/*
+		 * Interacts with the light where the object is lit.
+		 */
+		Color diffuseColor;
+		
+		/* 
+		 *   
+		 */
+		Color specularColor;
+
+		/* 
+		 * 
+		 */
+		float shininess;
+
+		/* 
+		 * If true, draws on both the FRONT and BACK poly faces.
+		 */
+		bool doubleSided;
+
+		/*
+		 * If true, enables specular reflection with the specularColor property.
+		 */
+		bool specularEnabled;
+
+		/*
+		 * If true, enables the shininess openGL property with the shiness material value.
+		 */
+		bool shininessEnabled;
 	};
 
 	/*
@@ -347,9 +412,9 @@ namespace fm {
 		ShapeNode(Color color);
 
 		/*
-		 * The color that will be drawn.
+		 * The material of the shape.
 		 */
-		Color color;
+		Material material;
 	};
 
 	/*
@@ -367,9 +432,19 @@ namespace fm {
 	 * Sphere node, derives from ShapeNode.
 	 */
 	class SphereNode : public ShapeNode {
+	private:
+		int _slices;
+		int _stacks;
+
 	public:
 		SphereNode(Color color);
 		SphereNode();
+
+		/* */
+		int& getSlices();
+		
+		/* */
+		int& getStacks();
 
 		void render() override;
 	};
@@ -451,5 +526,20 @@ namespace fm {
 
 		void render() override;
 	};
+
+	/*
+	 * Draws the mesh of a loadable object.
+	 */
+	class MeshNode : public SceneNode {
+	public:
+		ObjModel* model;
+		Material material;
+
+		MeshNode();
+		MeshNode(std::string modelPath);
+
+		void render() override;
+	};
 }
+
 #endif

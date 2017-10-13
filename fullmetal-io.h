@@ -20,10 +20,14 @@ namespace fm {
 	class AmbientLightNode;
 	class DirectionalLightNode;
 	class SpotLightNode;
+	class MeshNode;
 
 	class Transform;
 	class Vector3;
 	struct Color;
+
+	struct Material;
+	struct ObjModel;
 
 	namespace io { 
 		/*
@@ -54,41 +58,50 @@ namespace fm {
 		 */
 		SceneNode* readNode(nlohmann::json& json, NodeTypeTable* typeTable);
 
-		void transform_to_json(json& j, Transform& transform);
-		void transform_from_json(json& j, Transform& transform);
+		void writeTransform(json& j, Transform& transform);
+		void readTransform(json& j, Transform& transform);
 
-		void vector3_to_json(json& j, Vector3& vec);
-		void vector3_from_json(json& j, Vector3& vec);
+		void writeVector3(json& j, Vector3& vec);
+		void readVector3(json& j, Vector3& vec);
 
-		void color_to_json(json& j, Color& color);
-		void color_from_json(json& j, Color& color);
+		void writeColor(json& j, Color& color);
+		void readColor(json& j, Color& color);
 
-		void SceneNode_to_json(json& j, SceneNode& node);
-		void SceneNode_from_json(json& j, SceneNode& node);
+		void writeMaterial(json& j, Material& material);
+		void readMaterial(json& j, Material& material);
 
-		void ShapeNode_to_json(json& j, ShapeNode& shape);
-		void ShapeNode_from_json(json& j, ShapeNode& shape);
+		void writeSceneNode(json& j, SceneNode& node);
+		void readSceneNode(json& j, SceneNode& node);
 
-		void CubeNode_to_json(json& j, CubeNode& cube);
-		void CubeNode_from_json(json& j, CubeNode& cube);
+		void writeShapeNode(json& j, ShapeNode& shape);
+		void readShapeNode(json& j, ShapeNode& shape);
 
-		void SphereNode_to_json(json& j, SphereNode& sphere);
-		void SphereNode_from_json(json& j, SphereNode& sphere);
+		void writeCubeNode(json& j, CubeNode& cube);
+		void readCubeNode(json& j, CubeNode& cube);
 
-		void PlaneNode_to_json(json& j, PlaneNode& plane);
-		void PlaneNode_from_json(json& j, PlaneNode& plane);
+		void writeSphereNode(json& j, SphereNode& sphere);
+		void readSphereNode(json& j, SphereNode& sphere);
 
-		void LightNode_to_json(json& j, LightNode& light);
-		void LightNode_from_json(json& j, LightNode& light);
+		void writePlaneNode(json& j, PlaneNode& plane);
+		void readPlaneNode(json& j, PlaneNode& plane);
 
-		void AmbientLightNode_to_json(json& j, AmbientLightNode& ambientLight);
-		void AmbientLightNode_from_json(json& j, AmbientLightNode& ambientLight);
+		void writeLightNode(json& j, LightNode& light);
+		void readLightNode(json& j, LightNode& light);
 
-		void DirectionalLightNode_to_json(json& j, DirectionalLightNode& directionalLight);
-		void DirectionalLightNode_from_json(json& j, DirectionalLightNode& directionalLight);
+		void writeAmbientLightNode(json& j, AmbientLightNode& ambientLight);
+		void readAmbientLightNode(json& j, AmbientLightNode& ambientLight);
 
-		void SpotLight_to_json(json& j, SpotLightNode& spotLight);
-		void Spotlight_from_json(json& j, SpotLightNode& spotLight);
+		void writeDirectionalLightNode(json& j, DirectionalLightNode& directionalLight);
+		void readDirectionalLightNode(json& j, DirectionalLightNode& directionalLight);
+
+		void writeSpotLightNode(json& j, SpotLightNode& spotLight);
+		void readSpotLightNode(json& j, SpotLightNode& spotLight);
+
+		void writeObjModel(json& j, ObjModel* model);
+		void readObjModel(json& j, ObjModel** model);
+
+		void writeMeshNode(json& j, MeshNode& meshNode);
+		void readMeshNode(json& j, MeshNode& meshNode);
 	}
 }
 
