@@ -27,7 +27,6 @@ void fm::gui::introspectShapeNode(ShapeNode * sceneNode)
 {
 	introspectSceneNode(sceneNode);
 	fm::gui::introspectMaterial(sceneNode->material);
-	//fm::gui::introspectColor(sceneNode->color);
 }
 
 void fm::gui::introspectLightNode(LightNode * lightNode)
@@ -146,10 +145,13 @@ void fm::gui::introspectMeshNode(MeshNode * meshNode)
 	
 	// if model loaded, show the amount of faces imported.
 	if (model != nullptr) {
-		ImGui::LabelText("Faces", std::to_string(model->polyFaces.size()).c_str());
+		ImGui::LabelText("Polygons", std::to_string(model->polyFaces.size()).c_str());
 	}
 	else {
-
+		// allow importing of models
+		if (ImGui::Button("Import Model")) {
+			beginImportObj(&meshNode->model);
+		}
 	}
 
 	ImGui::Unindent();

@@ -1,11 +1,14 @@
 #include "fullmetal.h"
-#include "glut.h"
 #include "fullmetal-3d.h"
+#include "glut.h"
 
 #include <math.h>
+#include <cassert>
+
+// Includes for OpenGL go here
 #include <gl/GL.h>
 #include <gl/GLU.h>
-#include <cassert>
+#include "../SOIL.h"
 
 void fm::clamp(int & value, int min, int max)
 {
@@ -81,6 +84,24 @@ bool fm::removeNodeFromVector(SceneNode * node, std::vector<SceneNode*>& _nodes)
 	}
 
 	return false;
+}
+
+int fm::createDynamicLightId()
+{
+	// Global id, begins at 0
+	static int global_id = GL_LIGHT0;
+
+	// local ref to our id
+	int id = global_id;
+
+	// increment global id
+	++global_id;
+	
+	// We need to figure out how to handle this later, but for now
+	// just don't permit creation of more than 8 lights.
+	assert(global_id >= GL_LIGHT0 || global_id <= GL_LIGHT7);
+
+	return id;
 }
 
 void fm::moveNodeUpHierarchy(SceneNode * node, SceneNodeGraph * graph)
@@ -221,6 +242,16 @@ fm::Vector3 fm::Vector3::operator-(const Vector3& v2) {
 	return Vector3(this->x - v2.x, this->y - v2.y, this->z - v2.z);
 }
 
+fm::Vector3 fm::Vector3::operator*(const Vector3 & v2)
+{
+	return Vector3(x * v2.x, y * v2.y, z * v2.z);
+}
+
+fm::Vector3 fm::Vector3::operator*(const float& scalar)
+{
+	return Vector3(x * scalar, y * scalar, z * scalar);
+}
+
 fm::Vector3& fm::Vector3::operator+=(const Vector3& v2) {
 	this->x += v2.x;
 	this->y += v2.y;
@@ -309,6 +340,43 @@ float fm::Input::scrollAmount()
 	return frameState.mouse.scrollDirection;
 }
 
+// TEXTURE DATA IMPLEMENTATION
+fm::TextureData::TextureData() : glTextureId(0) { }
+
+// IMPLEMENTATION OF TEXTURE DATA
+fm::TextureData* fm::loadTextureData(std::string fp)
+{
+	TextureData* txrData = new TextureData();
+
+	// Assign filepath
+	txrData->filepath = fp;
+
+	// Load the texture
+	txrData->glTextureId = SOIL_load_OGL_texture(
+		fp.c_str(), SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, 
+		SOIL_FLAG_MIPMAPS | SOIL_FLAG_NTSC_SAFE_RGB | SOIL_FLAG_COMPRESS_TO_DXT);
+
+	// Ensure texture loaded & was given a proper id
+	assert(txrData->glTextureId != 0);
+
+	return txrData;
+}
+
+// IMPLEMENTATION OF TEXTURE
+fm::Texture::Texture() : data(nullptr) { }
+
+fm::Texture::Texture(std::string fp) : Texture()
+{
+	data = loadTextureData(fp);
+}
+
+fm::Texture::~Texture()
+{
+	if (data != nullptr) {
+		delete data;
+	}
+}
+
 // TRANSFORM IMPLEMENTATION
 fm::Transform::Transform() : position(0, 0, 0), scale(1, 1, 1), rotation(0, 0, 0), angle(0.0f) { }
 
@@ -341,23 +409,141 @@ void fm::Transform::move(float x, float y, float z)
 }
 
 // CAMERA IMPLEMENTATION
-fm::Camera::Camera() : transform() {
+fm::Camera::Camera(int w, int h) : _transform(), _screenW(w), _screenH(h) {
+	_pitch = 0.0f;
+	_roll = 0.0f;
+	_yaw = 0.0f;
 
+	_dirty = false;
+
+	// calculate our directional vectors
+	calculateDirections();
 }
 
-void fm::Camera::view() {
+void fm::Camera::onScreenResize(int w, int h)
+{
+	_screenW = w;
+	_screenH = h;
+}
+
+void fm::Camera::pitch(float p)
+{
+	_pitch += p;
+	_dirty = true;
+}
+
+void fm::Camera::yaw(float y)
+{
+	_yaw += y;
+	_dirty = true;
+}
+
+void fm::Camera::setPosition(Vector3 pos)
+{
+	_transform.position = pos;
+	_dirty = true;
+}
+
+void fm::Camera::move(Vector3 offset)
+{
+	_transform.position += offset;
+	_dirty = true;
+}
+
+void fm::Camera::calculateDirections() 
+{
+	// Calculate cos & sin values for each axis rot (yaw, pitch, roll)
+	static const auto pi = 3.1415;
+	float cosR = cosf(_yaw * pi / 180.0f);
+	float cosP = cosf(_pitch * pi / 180.0f);
+	float cosY = cosf(_roll * pi / 180.0f);
+	float sinY = sinf(_yaw * pi / 180.0f);
+	float sinP = sinf(_pitch * pi / 180.0f);
+	float sinR = sinf(_roll * pi / 180.0f);
+
+	// calculate forward vector from our angle
+	// and then apply our position so we know where we're looking
+	_forward.x = sinY * cosP;
+	_forward.y = sinP;
+	_forward.z = cosP * -cosY;
+	_forwardTarget = _forward + _transform.position;
+
+	// calculate up vector, unit vector
+	_up.x = -cosY * sinR - sinY * sinP * cosR;
+	_up.y = cosP * cosR;
+	_up.z = -sinY * sinR - sinP * cosR * -cosY;
+
+	// calculate right, which is a cross product between forward and up
+	_right = _forward.cross(_up);
+}
+
+void fm::Camera::update() 
+{
+	// if there have been no changes, don't run
+	if (!_dirty) {
+		return;
+	}
+
+	calculateDirections();
+	_dirty = false;
+}
+
+void fm::Camera::view() 
+{
 	// Reset transformations
 	glLoadIdentity();
 	
-	// Set the camera
-	gluLookAt(0.0f, 0.0f, 6.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+	auto& position = _transform.position;
 
-	// BEGIN RENDER
-	// rotate top matrix
-	glTranslatef(-1.0f, 0.0f, 0.0f);
-	
-	// tilt top matrix
-	glRotatef(20, 1, 0, 0);
+	// Set the camera
+	gluLookAt(
+		// position in world space
+		position.x, position.y, position.z, 
+		// lookAt - what the camera is looking at
+		_forwardTarget.x, _forwardTarget.y, _forwardTarget.z,
+		// Up - Up direction relative to the camera.
+		_up.x, _up.y, _up.z
+	);
+}
+
+int fm::Camera::getCentreX()
+{
+	return _screenW / 2;
+}
+
+int fm::Camera::getCentreY()
+{
+	return _screenH / 2;
+}
+
+fm::Vector3 fm::Camera::up()
+{
+	return _up;
+}
+
+fm::Vector3 fm::Camera::down()
+{
+	return Vector3(-_up.x, -_up.y, -_up.z);
+}
+
+fm::Vector3 fm::Camera::forward()
+{
+	return _forward;
+}
+
+fm::Vector3 fm::Camera::back()
+{
+	return Vector3(-_forward.x, -_forward.y, -_forward.z);
+}
+
+fm::Vector3 fm::Camera::right()
+{
+	return _right;
+}
+
+fm::Vector3 fm::Camera::left()
+{
+	return Vector3(-_right.x, -_right.y, -_right.z);
 }
 
 // COLOR IMPLEMENTATION
@@ -369,7 +555,15 @@ fm::Color::Color() : Color(1, 1, 1, 1) { }
 
 // MATERIAL IMPLEMENTATION
 fm::Material::Material() : diffuseColor(), ambientColor(), specularColor(), 
-	doubleSided(false), specularEnabled(false), shininess(16) { }
+	doubleSided(false), specularEnabled(false), shininess(16), texture(nullptr) { }
+
+fm::Material::~Material()
+{
+	if (texture != nullptr) {
+		delete texture;
+		texture = nullptr;
+	}
+}
 
 // TRI IMPLEMENTATION
 fm::Tri::Tri() { }
@@ -682,6 +876,7 @@ void fm::PlaneNode::buildQuads(int size, int width, int height)
 // LIGHT NODE IMPLEMENTATION
 fm::LightNode::LightNode(Color color) : color(color) {
 	name = "Light Node";
+	lightId = createDynamicLightId();
 }
 
 // AMBIENT LIGHT NODE IMPLEMENTATION
@@ -702,10 +897,10 @@ void fm::AmbientLightNode::render()
 	float light_diffuse[] = { diffuse.r, diffuse.g, diffuse.b, diffuse.a };
 	float light_position[] = { transform.position.x, transform.position.y, transform.position.z, 1.0f };
 
-	glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient);
-	glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
-	glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-	glEnable(GL_LIGHT0);
+	glLightfv(lightId, GL_AMBIENT, light_ambient);
+	glLightfv(lightId, GL_DIFFUSE, light_diffuse);
+	glLightfv(lightId, GL_POSITION, light_position);
+	glEnable(lightId);
 }
 
 // DIRECTIONAL LIGHT NODE IMPLEMENTATION
@@ -722,9 +917,9 @@ void fm::DirectionalLightNode::render()
 	float light_position[] = { transform.position.x, transform.position.y, transform.position.z, 0.0f };
 	float light_diffuse[] = { color.r, color.g, color.b, color.a };
 	
-	glLightfv(GL_LIGHT1, GL_DIFFUSE, light_diffuse);
-	glLightfv(GL_LIGHT1, GL_POSITION, light_position);
-	glEnable(GL_LIGHT1);
+	glLightfv(lightId, GL_DIFFUSE, light_diffuse);
+	glLightfv(lightId, GL_POSITION, light_position);
+	glEnable(lightId);
 }
 
 // SPOT LIGHT NODE IMPLEMENTATION
@@ -749,13 +944,13 @@ void fm::SpotLightNode::render()
 	GLfloat light_position[] = { transform.position.x, transform.position.y, transform.position.z, 1.0f };
 	GLfloat spot_direction[] = { direction.x, direction.y, direction.z };
 
-	glLightfv(GL_LIGHT2, GL_AMBIENT, light_ambient);
-	glLightfv(GL_LIGHT2, GL_DIFFUSE, light_diffuse);
-	glLightfv(GL_LIGHT2, GL_POSITION, light_position);
-	glLightf(GL_LIGHT2, GL_SPOT_CUTOFF, cutoff);
-	glLightfv(GL_LIGHT2, GL_SPOT_DIRECTION, spot_direction);
-	glLightf(GL_LIGHT2, GL_SPOT_EXPONENT, exponent);
-	glEnable(GL_LIGHT2);
+	glLightfv(lightId, GL_AMBIENT, light_ambient);
+	glLightfv(lightId, GL_DIFFUSE, light_diffuse);
+	glLightfv(lightId, GL_POSITION, light_position);
+	glLightf(lightId, GL_SPOT_CUTOFF, cutoff);
+	glLightfv(lightId, GL_SPOT_DIRECTION, spot_direction);
+	glLightf(lightId, GL_SPOT_EXPONENT, exponent);
+	glEnable(lightId);
 }
 
 // MESH NODE IMPLEMENTATION
@@ -775,7 +970,22 @@ void fm::MeshNode::render()
 
 	// if the model hasn't been loaded yet, nothing to render.
 	if (model != nullptr) {
-		glBegin(GL_POLYGON);
+		// Check if we're using a texture, if so, bind it!
+		Texture* texture = material.texture;
+		bool usingTexture = false;
+
+		if (texture != nullptr && texture->data != nullptr) {
+			// Linear filtering
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			
+			// Bind the texture using the loaded texture id
+			glBindTexture(GL_TEXTURE_2D, material.texture->data->glTextureId);
+			
+			// Indicate that we're using the texture
+			usingTexture = true;
+		}
+
+		glBegin(GL_TRIANGLES);
 
 		// for every face of the model..
 		for (auto& face : model->polyFaces) {
@@ -784,9 +994,20 @@ void fm::MeshNode::render()
 				// indexes in obj models start at 1, not 0, so remove 1
 				auto& vertex = model->vertices[index.vertexIndex - 1];
 				auto& normal = model->vertexNormals[index.normalIndex - 1];
+
+				// use the normal
+				glNormal3f(normal.x, normal.y, normal.z);
+
+				// if we're using the texture..
+				if (usingTexture) {
+					// use the texture coords for the texture we've bound
+					auto& texcoord = model->textureCoords[index.texCoordIndex - 1];
+					glTexCoord2f(texcoord.x, texcoord.y);
+					//glTexCoord3f(texcoord.x, texcoord.y, texcoord.z);
+				}
 				
-				// draw the normal and vertex
-				normalVertex(normal, vertex.x, vertex.y, vertex.z);
+				// use the vertex
+				glVertex3f(vertex.x, vertex.y, vertex.z);
 			}
 		}
 

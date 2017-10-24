@@ -2,17 +2,22 @@
  * Fullmetal is a set of utilities for OpenGL, including a 
  * node-driven scene graph. The node graph has features like:
  * Handling parent-child matrix relationships.
- * Shapes such as cubes, spheres, polygons. 
- * Lights including ambient, spot and directional. 
+ * Primitive shapes such as cubes, spheres, polygons. 
+ * Basic Lights including ambient, spot and directional.
+ * Parsing obj files, materials, textures, etc.
+
+ * It also comes with a JSON I/O and front-end gui
+ * for editing the graph at runtime.
 
  * TODO:
-	* Find a way to dynamically handle light id assignment (0-7)
-	* Implement a camera with utilities. NOT a scene node.
 	* Implement sorting for SceneNodes so we can put lighting first.
+	* Implement a gizmo system for drawing normals, cameras, lights, etc.
+	* Implement lerp functions for tweening.
 
  * GitHub Repo: https://github.com/charliegillies/fullmetal
  * Author: Charlie Gillies
  * Start Date: 19.09.2017
+ * End Date: ? 
  */
 
 #ifndef FULLMETAL_H
@@ -31,6 +36,7 @@ namespace fm {
 	class Camera;
 	class SceneNodeGraph;
 	class SceneNode;
+	struct Texture;
 	struct Material;
 	struct ObjModel;
 
@@ -61,6 +67,12 @@ namespace fm {
 	 * Helper for removing a specific scene node from a vector of scene nodes.
 	 */
 	bool removeNodeFromVector(SceneNode* node, std::vector<SceneNode*>& nodes);
+
+	/*
+	 * Gets a dynamic value between GL_LIGHT0 and GL_LIGHT7
+	 * So every light in the scene can use a dynamic ID.
+	 */
+	int createDynamicLightId();
 
 	void moveNodeUpHierarchy(SceneNode* node, SceneNodeGraph* graph);
 
@@ -102,6 +114,9 @@ namespace fm {
 
 		Vector3 operator+(const Vector3& v2);
 		Vector3 operator-(const Vector3& v2);
+
+		Vector3 operator*(const Vector3& v2);
+		Vector3 operator*(const float& scalar);
 
 		Vector3& operator+=(const Vector3& v2);
 		Vector3& operator-=(const Vector3& v2);
@@ -215,18 +230,68 @@ namespace fm {
 	 * Handles the viewport, frustrum, etc.
 	 */
 	class Camera {
+	private:
+		// direction of the camera
+		Transform _transform;
+		// directional vectors, calculated in every rotation change
+		Vector3 _forward, _forwardTarget, _up, _right;
+		// pitch = x axis, yaw = y axis, roll = z axis
+		float _yaw, _pitch, _roll;
+		// if rotation has changed
+		bool _dirty;
+		// screen size
+		int _screenW, _screenH;
+
+		// calculates the directions
+		void calculateDirections();
+
 	public:
-		Camera();
+		Camera(int screenW, int screenH);
 
-		/*
-		 * 
-		 */
-		Transform transform;
+		/** Call on the screen resize event. */
+		void onScreenResize(int w, int h);
 
-		/*
-		 * 
-		 */
+		/** Rotates on y axis. */
+		void pitch(float p);
+
+		/** Rotates on x axis. */
+		void yaw(float y);
+
+		/** Sets position of the camera. */
+		void setPosition(Vector3 pos);
+
+		/** Offsets the camera position by the given Vector3 */
+		void move(Vector3 offset);
+
+		/** Calculates the directions, if there's been a change. */
+		void update();
+
+		/** Applies the camera view. */
 		void view();
+
+		/** Gets the middle of the screen on X. */
+		int getCentreX();
+
+		/** Gets the middle of the screen on Y. */
+		int getCentreY();
+
+		/** Up direction from the camera transform. */
+		Vector3 up();
+
+		/** Down direction from camera transform. */
+		Vector3 down();
+
+		/** Forward direction from camera transform. */
+		Vector3 forward();
+
+		/** Backward direction from camera transform.*/
+		Vector3 back();
+
+		/** Left direction from camera transform. */
+		Vector3 left();
+
+		/** Right direction from camera transform. */
+		Vector3 right();
 	};
 
 	/*
@@ -244,11 +309,65 @@ namespace fm {
 	};
 
 	/*
+	 * The texture data that is loaded via SOIL.
+	 */
+	struct TextureData {
+		TextureData();
+
+		/*
+		 * The id of the loaded texture, assigned using SOIL for use in OpenGL.
+		 * If this id is 0, loading failed.
+		 */
+		int glTextureId;
+		
+		/*
+		 * The filepath of the texture that is being loaded. 
+		 * This is used for the editor and io more than anything else.
+		 */
+		std::string filepath;
+	};
+
+	/*
+	 * Loads a TextureData from a filepath using SOIL.
+	 */
+	TextureData* loadTextureData(std::string fp);
+
+	/*
+	 * Wrapper around texture data with specific information that
+	 * will be used by OpenGL for materials, 3d models, etc.
+	 */
+	struct Texture {
+		/*
+		 * Creates an empty texture.
+		 */
+		Texture();
+		
+		/*
+		 * Creates a texture, attempts to load texture data via the filepath given.
+		 */
+		Texture(std::string fp);
+		
+		~Texture();
+
+		/*
+		 * Data that was loaded from the img using SOIL.
+		 * Is a nullptr by default.
+		 */
+		TextureData* data;
+	};
+
+	/*
 	 * Represents the material of an object.
 	 */
 	struct Material {
 		Material();
-		
+		~Material();
+
+		/*
+		 * 
+		 */
+		Texture* texture;
+
 		/*
 		 * The overall colour of the object, is effected by the ambient light in the scene.
 		 */
@@ -477,6 +596,9 @@ namespace fm {
 	 * Abstract base class for lighting nodes.
 	 */
 	class LightNode : public SceneNode {
+	protected:
+		int lightId;
+
 	public:
 		Color color;
 

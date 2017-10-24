@@ -7,6 +7,8 @@
 // and also fullmetal!
 #include "fullmetal.h"
 #include "fullmetal-types.h"
+#include "fullmetal-filebrowser.h"
+#include "fullmetal-3d.h"
 
 #ifdef FM_IO
 #include "fullmetal-io.h"
@@ -18,11 +20,33 @@
 #include <stdio.h>
 #include <string>
 
-GLuint textureHandle = NULL;
+// OPENGL 
+GLuint fontTxrHandle = NULL;
+
+// IMPORTING STATE
+fm::Texture** _importTxrPtrRef = nullptr;
+fm::ObjModel** _importObjModelRef = nullptr;
+
+// These are the gui views for handling file importing
+static fm::gui::DirectoryGuiView* objDirectory = nullptr;
+static fm::gui::DirectoryGuiView* txrDirectory = nullptr;
 
 fm::gui::GraphRenderConfig::GraphRenderConfig() : window_toggled(true), selected_node(nullptr) { }
 
 void fm::gui::drawNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable)
+{
+	drawNormalState(nodeGraph, config, typeTable);
+
+	if (_importTxrPtrRef != nullptr) {
+		drawTxrImporter();
+	}
+
+	if (_importObjModelRef != nullptr) {
+		drawObjImporter();
+	}
+}
+
+void fm::gui::drawNormalState(SceneNodeGraph * nodeGraph, GraphRenderConfig * config, NodeTypeTable * typeTable)
 {
 	// Render the scene graph window
 	if (ImGui::Begin("Scene Graph##tree", &config->window_toggled)) {
@@ -57,7 +81,7 @@ void fm::gui::drawNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* config
 
 		// Show the clicked node, if any
 		if (config->selected_node != nullptr) {
-			if (ImGui::BeginChild("Selected Node##tree", ImVec2{ }, true)) {
+			if (ImGui::BeginChild("Selected Node##tree", ImVec2{}, true)) {
 				typeTable->introspect(config->selected_node);
 				ImGui::EndChild();
 			}
@@ -65,6 +89,49 @@ void fm::gui::drawNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* config
 
 		ImGui::End();
 	}
+}
+
+void fm::gui::drawObjImporter()
+{
+	assert(objDirectory != nullptr);
+	// updates the .obj browsing directory, waiting for the callback
+	objDirectory->update();
+}
+
+void fm::gui::drawTxrImporter()
+{
+	assert(txrDirectory != nullptr);
+	// updates the .txr browsing directory, waiting for the callback
+	txrDirectory->update();
+}
+
+void fm::gui::importObjFileCallback(std::string path)
+{
+	// Load model, ensure load happened properly
+	ObjModel* model = loadObjModel(path);
+	assert(model != nullptr);
+
+	// Assign our model ref, set ref to null so gui closes
+	*_importObjModelRef = model;
+	_importObjModelRef = nullptr;
+}
+
+void fm::gui::importTxrFileCallback(std::string path)
+{
+	// Load txr, assign to ref, set ref to null so gui closes
+	Texture* txr = new Texture(path);
+	*_importTxrPtrRef = txr;
+	_importTxrPtrRef = nullptr;
+}
+
+void fm::gui::beginImportObj(ObjModel ** mesh)
+{
+	_importObjModelRef = mesh;
+}
+
+void fm::gui::beginImportTxr(Texture ** txr)
+{
+	_importTxrPtrRef = txr;
 }
 
 void fm::gui::drawAddNodeOptions(SceneNodeGraph* nodeGraph, GraphRenderConfig* graphConfig, NodeTypeTable* typeTable)
@@ -96,19 +163,6 @@ void fm::gui::drawAddNodeOptions(SceneNodeGraph* nodeGraph, GraphRenderConfig* g
 		if (ImGui::Button("Delete node")) {
 			deleteNodeFromGraph(graphConfig, nodeGraph);
 		}
-
-		//TODO implement hiearchy traversal
-		//// DOWN IN HIERARCHY
-		//ImGui::SameLine();
-		//if (ImGui::Button("Up")) {
-
-		//}
-
-		//// UP IN HIERARCHY
-		//ImGui::SameLine();
-		//if (ImGui::Button("Down")) {
-
-		//}
 	}
 }
 
@@ -132,6 +186,12 @@ void fm::gui::deleteNodeFromGraph(fm::gui::GraphRenderConfig * graphConfig, fm::
 		delete child;
 		graphConfig->selected_node = nullptr;
 	}
+
+	// If we have the importer open, and the node that owns the ptr
+	// we are pointing at is deleted, attempting to import the file
+	// will be a nullref and will break the program. Assign nullptr to avoid this.
+	_importObjModelRef = nullptr;
+	_importTxrPtrRef = nullptr;
 }
 
 void fm::gui::drawComboBox(std::string title, std::vector<std::string>& items, int & comboIndex)
@@ -190,6 +250,13 @@ fm::SceneNode* fm::gui::drawNodeSelect(SceneNode * node, GraphRenderConfig* conf
 	bool nodeSelected = node == config->selected_node;
 	SceneNode* clicked = nullptr;
 
+	// if the node is disabled, draw the leaf as half opacity
+	// this helps indicate what nodes are disabled and enabled
+	// inside of the tree view
+	bool enabled = node->enabled;
+	if(!enabled)
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{ 1.f, 1.f, 1.f, 0.5f });
+
 	// if we have children we can open the node, otherwise it's a leaf.
 	ImGuiTreeNodeFlags node_flags = (childNodeCount > 0) ?
 		ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
@@ -218,6 +285,10 @@ fm::SceneNode* fm::gui::drawNodeSelect(SceneNode * node, GraphRenderConfig* conf
 	// Pop the tree node
 	if(nodeOpen && childNodeCount > 0)
 		ImGui::TreePop();
+
+	// ensure we pop the pushed color style
+	if (!enabled)
+		ImGui::PopStyleColor();
 
 	return clicked;
 }
@@ -284,6 +355,22 @@ void fm::gui::introspectMaterial(Material & material)
 	ImGui::Text("Material");
 	ImGui::Indent();
 
+	// introspect texture
+	if (material.texture == nullptr) {
+		if (ImGui::Button("Import Texture")) {
+			beginImportTxr(&material.texture);
+		}
+	}
+	else {
+		ImGui::LabelText("Texture", material.texture->data->filepath.c_str());
+
+		// delete current texture, next frame the import button will appear
+		if (ImGui::Button("Remove Texture")) {
+			delete material.texture;
+			material.texture = nullptr;
+		}
+	}
+
 	ImGui::Checkbox("Double Sided", &material.doubleSided);
 
 	// introspect ambient color
@@ -321,6 +408,16 @@ void fm::gui::introspectMaterial(Material & material)
 
 void fm::gui::startGui(int width, int height)
 {
+	// Obj directory can import .obj files.
+	objDirectory = new fm::gui::DirectoryGuiView("models");
+	objDirectory->setAllowedFiletypes(std::vector<std::string> { ".obj" });
+	objDirectory->setSelectCallback(importObjFileCallback);
+
+	// Txr directory can import .png and .jpg files.
+	txrDirectory = new fm::gui::DirectoryGuiView("models");
+	txrDirectory->setAllowedFiletypes(std::vector<std::string> { ".png", ".jpg" });
+	txrDirectory->setSelectCallback(importTxrFileCallback);
+
 	// Perform setup for ImGui
 	ImGuiIO& io = ImGui::GetIO();
 	io.DisplaySize = ImVec2{ (float)width, (float)height };
@@ -352,13 +449,13 @@ void fm::gui::startGui(int width, int height)
 	
 	GLint last_texture;
 	glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);
-	glGenTextures(1, &textureHandle);
-	glBindTexture(GL_TEXTURE_2D, textureHandle);
+	glGenTextures(1, &fontTxrHandle);
+	glBindTexture(GL_TEXTURE_2D, fontTxrHandle);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, fw, fh, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
-	io.Fonts->TexID = (void*)(intptr_t)textureHandle;
+	io.Fonts->TexID = (void*)(intptr_t)fontTxrHandle;
 	glBindTexture(GL_TEXTURE_2D, last_texture);
 }
 
@@ -380,7 +477,6 @@ void fm::gui::updateGui(Input * input, float dt, int width, int height)
 
 void fm::gui::renderGui()
 {
-	// TODO switch states?
 	ImGui::Render();
 }
 

@@ -21,6 +21,8 @@ namespace fm {
 	class Vector3;
 	struct Color;
 	struct Material;
+	struct Texture;
+	struct ObjModel;
 
 	namespace gui {
 		/*
@@ -48,9 +50,40 @@ namespace fm {
 		/*
 		 * Renders a node graph.
 		 * Must be called after updateGui() but before renderGui().
+		 * Call this preferably in update(), as it's primarily logic with no rendering.
 		 * Param 'typeTable' can be null, if it is then no add node options will draw.
 		 */
 		void drawNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable);
+
+		/*
+		 * 
+		 */
+		void drawNormalState(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable);
+
+		/*
+		 * 
+		 */
+		void drawObjImporter();
+
+		/*
+		 * 
+		 */
+		void drawTxrImporter();
+
+		/*
+		 * Callback invoked by the directory gui. 
+		 * Indicates that a .obj file at a relative address to the exe
+		 * is ready for importing.
+		 */
+		void importObjFileCallback(std::string path);
+
+
+		/*
+		 * Callback invoked by the directory gui.
+		 * Indicates that a .png or .jpg file at a relative address to the exe
+		 * is ready for importing.
+		 */
+		void importTxrFileCallback(std::string path);
 
 		/*
 		 * Renders the add node options from the node type table.
@@ -117,6 +150,18 @@ namespace fm {
 		 * Begins the render of the gui.
 		 */
 		void renderGui();
+
+		/*
+		 * Begins import of the obj model.
+		 * Takes a ptr to the obj model ptr.
+		 */
+		void beginImportObj(ObjModel** mesh);
+
+		/*
+		 * Begins import of a texture.
+		 * Takes a ptr to the texture ptr.
+		 */
+		void beginImportTxr(Texture** txr);
 
 		/*
 		 * Callback function for rendering imgui data.
