@@ -10,9 +10,7 @@
  * for editing the graph at runtime.
 
  * TODO:
-	* Implement sorting for SceneNodes so we can put lighting first.
 	* Implement a gizmo system for drawing normals, cameras, lights, etc.
-	* Implement lerp functions for tweening.
 
  * GitHub Repo: https://github.com/charliegillies/fullmetal
  * Author: Charlie Gillies
@@ -28,6 +26,10 @@
 #include <string>
 
 namespace fm {
+
+	// Categories define in what order the nodes will be rendered
+	const int LIGHT_CATEGORY = -1;
+	const int DEFAULT_NODE_CATEGORY = 1;
 
 	struct Color;
 	class Vector3;
@@ -231,10 +233,10 @@ namespace fm {
 	 */
 	class Camera {
 	private:
-		// direction of the camera
-		Transform _transform;
 		// directional vectors, calculated in every rotation change
 		Vector3 _forward, _forwardTarget, _up, _right;
+		// the position of the camera
+		Vector3 _position;
 		// pitch = x axis, yaw = y axis, roll = z axis
 		float _yaw, _pitch, _roll;
 		// if rotation has changed
@@ -461,6 +463,9 @@ namespace fm {
 		unsigned int _uid;
 		SceneNode* _parent;
 
+	protected:
+		int nodeCategory;
+
 	public:
 		SceneNode();
 
@@ -521,6 +526,12 @@ namespace fm {
 		 * Removes a child from the child nodes.
 		 */
 		SceneNode* removeChild(SceneNode* child);
+
+		/*
+		 * What node this category is in.
+		 * Determines render order in the scene.
+		 */
+		int category();
 	};
 
 	/*

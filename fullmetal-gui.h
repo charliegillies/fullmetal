@@ -53,7 +53,7 @@ namespace fm {
 		 * Call this preferably in update(), as it's primarily logic with no rendering.
 		 * Param 'typeTable' can be null, if it is then no add node options will draw.
 		 */
-		void drawNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable);
+		void updateNodeGraphGui(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable);
 
 		/*
 		 * 

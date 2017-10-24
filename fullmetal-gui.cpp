@@ -33,7 +33,7 @@ static fm::gui::DirectoryGuiView* txrDirectory = nullptr;
 
 fm::gui::GraphRenderConfig::GraphRenderConfig() : window_toggled(true), selected_node(nullptr) { }
 
-void fm::gui::drawNodeGraph(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable)
+void fm::gui::updateNodeGraphGui(SceneNodeGraph* nodeGraph, GraphRenderConfig* config, NodeTypeTable* typeTable)
 {
 	drawNormalState(nodeGraph, config, typeTable);
 

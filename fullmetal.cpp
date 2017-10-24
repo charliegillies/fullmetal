@@ -4,6 +4,7 @@
 
 #include <math.h>
 #include <cassert>
+#include <algorithm>
 
 // Includes for OpenGL go here
 #include <gl/GL.h>
@@ -409,7 +410,7 @@ void fm::Transform::move(float x, float y, float z)
 }
 
 // CAMERA IMPLEMENTATION
-fm::Camera::Camera(int w, int h) : _transform(), _screenW(w), _screenH(h) {
+fm::Camera::Camera(int w, int h) : _screenW(w), _screenH(h) {
 	_pitch = 0.0f;
 	_roll = 0.0f;
 	_yaw = 0.0f;
@@ -440,13 +441,13 @@ void fm::Camera::yaw(float y)
 
 void fm::Camera::setPosition(Vector3 pos)
 {
-	_transform.position = pos;
+	_position = pos;
 	_dirty = true;
 }
 
 void fm::Camera::move(Vector3 offset)
 {
-	_transform.position += offset;
+	_position += offset;
 	_dirty = true;
 }
 
@@ -466,7 +467,7 @@ void fm::Camera::calculateDirections()
 	_forward.x = sinY * cosP;
 	_forward.y = sinP;
 	_forward.z = cosP * -cosY;
-	_forwardTarget = _forward + _transform.position;
+	_forwardTarget = _forward + _position;
 
 	// calculate up vector, unit vector
 	_up.x = -cosY * sinR - sinY * sinP * cosR;
@@ -493,12 +494,10 @@ void fm::Camera::view()
 	// Reset transformations
 	glLoadIdentity();
 	
-	auto& position = _transform.position;
-
 	// Set the camera
 	gluLookAt(
 		// position in world space
-		position.x, position.y, position.z, 
+		_position.x, _position.y, _position.z, 
 		// lookAt - what the camera is looking at
 		_forwardTarget.x, _forwardTarget.y, _forwardTarget.z,
 		// Up - Up direction relative to the camera.
@@ -578,9 +577,18 @@ fm::SceneNodeGraph::~SceneNodeGraph()
 		delete node;
 }
 
+// Sorts nodes by comparing categories
+bool sortNodeByCategory(fm::SceneNode* a, fm::SceneNode* b) 
+{
+	return a->category() < b->category();
+}
+
 fm::SceneNode* fm::SceneNodeGraph::addNode(SceneNode * node)
 {
 	_nodes.push_back(node);
+
+	std::sort(_nodes.begin(), _nodes.end(), sortNodeByCategory);
+
 	return node;
 }
 
@@ -627,6 +635,7 @@ fm::SceneNode::SceneNode()
 	name = "Scene Node";
 	_parent = nullptr;
 	enabled = true;
+	nodeCategory = DEFAULT_NODE_CATEGORY;
 }
 
 fm::SceneNode::~SceneNode()
@@ -665,6 +674,11 @@ fm::SceneNode* fm::SceneNode::removeChild(SceneNode * child)
 	}
 	else
 		return child;
+}
+
+int fm::SceneNode::category()
+{
+	return nodeCategory;
 }
 
 fm::SceneNode * fm::SceneNode::getParent()
@@ -709,50 +723,50 @@ void fm::CubeNode::render()
 
 		//Front
 		const Vector3 frontNormal(0.0f, 0.0f, 1.0f);
-		normalVertex(frontNormal, -1.0f, -1.0f, 1.0f);
-		normalVertex(frontNormal, 1.0f, -1.0f, 1.0f);
-		normalVertex(frontNormal, 1.0f, 1.0f, 1.0f);
-		normalVertex(frontNormal, -1.0f, 1.0f, 1.0f);
+		normalVertex(frontNormal, -0.5f, -0.5f, 0.5f);
+		normalVertex(frontNormal, 0.5f, -0.5f, 0.5f);
+		normalVertex(frontNormal, 0.5f, 0.5f, 0.5f);
+		normalVertex(frontNormal, -0.5f, 0.5f, 0.5f);
 
 		// Right
 		//fmColor(Color(0.5f, 0.0f, 0.5f, 1.0f));
 		const Vector3 rightNormal(1.0f, 0.0f, 0.0f);
-		normalVertex(rightNormal, 1.0f, -1.0f, -1.0f);
-		normalVertex(rightNormal, 1.0f, 1.0f, -1.0f);
-		normalVertex(rightNormal, 1.0f, 1.0f, 1.0f);
-		normalVertex(rightNormal, 1.0f, -1.0f, 1.0f);
+		normalVertex(rightNormal, 0.5f, -0.5f, -0.5f);
+		normalVertex(rightNormal, 0.5f, 0.5f, -0.5f);
+		normalVertex(rightNormal, 0.5f, 0.5f, 0.5f);
+		normalVertex(rightNormal, 0.5f, -0.5f, 0.5f);
 
 		// Bottom
 		//fmColor(Color(0.0f, 0.5f, 0.5f, 1.0f));
 		const Vector3 bottomNormal(0.0f, -1.0f, 0.0f);
-		normalVertex(bottomNormal, 1.0f, -1.0f, 1.0f);
-		normalVertex(bottomNormal, 1.0f, -1.0f, -1.0f);
-		normalVertex(bottomNormal, -1.0f, -1.0f, -1.0f);
-		normalVertex(bottomNormal, -1.0f, -1.0f, 1.0f);
+		normalVertex(bottomNormal, 0.5f, -0.5f, 0.5f);
+		normalVertex(bottomNormal, 0.5f, -0.5f, -0.5f);
+		normalVertex(bottomNormal, -0.5f, -0.5f, -0.5f);
+		normalVertex(bottomNormal, -0.5f, -0.5f, 0.5f);
 
 		// Left
 		//fmColor(Color(0.0f, 0, 1, 1.0f));
 		const Vector3 leftNormal(-1.0f, 0.0f, 0.0f);
-		normalVertex(leftNormal, -1.0f, -1.0f, 1.0f);
-		normalVertex(leftNormal, -1.0f, -1.0f, -1.0f);
-		normalVertex(leftNormal, -1.0f, 1.0f, -1.0f);
-		normalVertex(leftNormal, -1.0f, 1.0f, 1.0f);
+		normalVertex(leftNormal, -0.5f, -0.5f, 0.5f);
+		normalVertex(leftNormal, -0.5f, -0.5f, -0.5f);
+		normalVertex(leftNormal, -0.5f, 0.5f, -0.5f);
+		normalVertex(leftNormal, -0.5f, 0.5f, 0.5f);
 
 		// Top
 		//fmColor(Color(0.0f, 1, 0, 1.0f));
 		const Vector3 topNormal(0, 1, 0);
-		normalVertex(topNormal, -1.0f, 1.0f, 1.0f);
-		normalVertex(topNormal, 1.0f, 1.0f, 1.0f);
-		normalVertex(topNormal, 1.0f, 1.0f, -1.0f);
-		normalVertex(topNormal, -1.0f, 1.0f, -1.0f);
+		normalVertex(topNormal, -0.5f, 0.5f, 0.5f);
+		normalVertex(topNormal, 0.5f, 0.5f, 0.5f);
+		normalVertex(topNormal, 0.5f, 0.5f, -0.5f);
+		normalVertex(topNormal, -0.5f, 0.5f, -0.5f);
 
 		// Back
 		//fmColor(Color(1.0f, 0, 0, 1.0f));
 		const Vector3 backNormal(0, 0, -1);
-		normalVertex(backNormal, -1.0f, -1.0f, -1.0f);
-		normalVertex(backNormal, 1.0f, -1.0f, -1.0f);
-		normalVertex(backNormal, 1.0f, 1.0f, -1.0f);
-		normalVertex(backNormal, -1.0f, 1.0f, -1.0f);
+		normalVertex(backNormal, -0.5f, -0.5f, -0.5f);
+		normalVertex(backNormal, 0.5f, -0.5f, -0.5f);
+		normalVertex(backNormal, 0.5f, 0.5f, -0.5f);
+		normalVertex(backNormal, -0.5f, 0.5f, -0.5f);
 
 	glEnd();
 
@@ -807,10 +821,11 @@ void fm::PlaneNode::render()
 	applyTransform(transform);
 	applyMaterial(material);
 
-	glBegin(GL_TRIANGLES);
 
 	// On a plane, all normals face up.
 	static const Vector3 planeNormal = Vector3(0, 1, 0);
+
+	glBegin(GL_TRIANGLES);
 
 	// now write every triangle we built with buildQuads()
 	for (int i = 0; i < _tris.size(); ++i) {
@@ -844,25 +859,27 @@ int fm::PlaneNode::height()
 
 void fm::PlaneNode::buildQuads(int size, int width, int height)
 {
+	_tris.clear();
+
 	_quadSize = size;
 	_width = width;
 	_height = height;
 
-	_tris.clear();
-
-	float x_offset = (size * width) / 2;
-	float y_offset = (size * height) / 2;
+	float sizef = (float)size;
+	float x_offset = (sizef * (float)width) / 2.f;
+	float y_offset = (sizef * (float)height) / 2.f;
 
 	for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
+			// we're thinking in 2d, imagining a plane from top-down
+			float x_pos = (float)(x * size) - x_offset;
+			float y_pos = (float)(y * size) - y_offset;
 
-			float x_pos = (float)x - x_offset;
-			float y_pos = (float)y - y_offset;
-
-			Vector3 v1 = Vector3(x_pos, 0, y_pos);
-			Vector3 v2 = Vector3(x_pos + (float)size, 0, y_pos);
-			Vector3 v3 = Vector3(x_pos + (float)size, 0, y_pos + (float)size);
-			Vector3 v4 = Vector3(x_pos, 0, y_pos + (float)size);
+			// so what we would see topdown as (x, y) is actually (x, z)
+			Vector3 v1 = Vector3(x_pos,				0,		y_pos);
+			Vector3 v2 = Vector3(x_pos + sizef,		0,		y_pos);
+			Vector3 v3 = Vector3(x_pos + sizef,		0,		y_pos + sizef);
+			Vector3 v4 = Vector3(x_pos,				0,		y_pos + sizef);
 
 			Tri tri1 = Tri(v1, v3, v4); //v1 v2 v4 make up the top left part
 			Tri tri2 = Tri(v1, v2, v3); //v1 v2 v3 make up the bottom right part
@@ -877,6 +894,7 @@ void fm::PlaneNode::buildQuads(int size, int width, int height)
 fm::LightNode::LightNode(Color color) : color(color) {
 	name = "Light Node";
 	lightId = createDynamicLightId();
+	nodeCategory = LIGHT_CATEGORY;
 }
 
 // AMBIENT LIGHT NODE IMPLEMENTATION
