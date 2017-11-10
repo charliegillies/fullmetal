@@ -10,6 +10,7 @@
 #include "fullmetal.h"
 #include "fullmetal-gui.h"
 #include "fullmetal-3d.h"
+#include "fullmetal-helpers.h"
 #include "imgui/imgui.h"
 
 void fm::gui::introspectSceneNode(SceneNode * sceneNode)
@@ -145,13 +146,43 @@ void fm::gui::introspectMeshNode(MeshNode * meshNode)
 	
 	// if model loaded, show the amount of faces imported.
 	if (model != nullptr) {
+		// display amount of poly faces
 		ImGui::LabelText("Polygons", std::to_string(model->polyFaces.size()).c_str());
+
+		// copy param, ref gets switched in switch() anyway
+		bool switched = model->switchedUvs;
+		if (ImGui::Checkbox("Flipped UVs", &switched)) {
+			switchModelUvs(model);
+		}
 	}
 	else {
 		// allow importing of models
 		if (ImGui::Button("Import Model")) {
 			beginImportObj(&meshNode->model);
 		}
+	}
+
+	ImGui::Unindent();
+}
+
+void fm::gui::introspectCylinderNode(CylinderNode * node)
+{
+	// introspect bases..
+	introspectShapeNode(node);
+
+	ImGui::Text("Cylinder Node Properties");
+	ImGui::Indent();
+
+	// allow input & change of number of segments
+	int segments = node->numSegments();
+
+	// wait for input..
+	if (ImGui::InputInt("Num Segments", &segments)) {
+		// clamp between 20 & 120
+		clamp(segments, 20, 120);
+
+		// rebuild the node according to the segment change
+		node->build(segments);
 	}
 
 	ImGui::Unindent();

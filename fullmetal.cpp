@@ -66,6 +66,32 @@ void fm::applyTransform(Transform& transform)
 	glScalef(transform.scale.x, transform.scale.y, transform.scale.z);
 }
 
+bool fm::applyTexture(Material & material)
+{
+	// Check if we're using a texture, if so, bind it!
+	Texture* texture = material.texture;
+
+	if (texture != nullptr && texture->data != nullptr) {
+		// Linear filtering
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		// Bind the texture using the loaded texture id
+		glBindTexture(GL_TEXTURE_2D, material.texture->data->glTextureId);
+
+		// Indicate that we're using the texture
+		return true;
+	}
+
+	return false;
+}
+
+void fm::normUvVert(float nx, float ny, float nz, float uvx, float uvy, float vx, float vy, float vz)
+{
+	glNormal3f(nx, ny, nz);
+	glTexCoord2f(uvx, uvy);
+	glVertex3f(vx, vy, vz);
+}
+
 void fm::normalVertex(const Vector3 & normal, float x, float y, float z)
 {
 	glNormal3f(normal.x, normal.y, normal.z);
@@ -74,17 +100,28 @@ void fm::normalVertex(const Vector3 & normal, float x, float y, float z)
 
 bool fm::removeNodeFromVector(SceneNode * node, std::vector<SceneNode*>& _nodes)
 {
-	for (auto i = _nodes.begin(); i != _nodes.end(); ++i) {
-		auto n = *i;
+	// try to find the node
+	auto r = std::find(_nodes.begin(), _nodes.end(), node);
 
-		// if found node, erase..
-		if (n == node) {
-			_nodes.erase(i);
-			return true;
-		}
+	if (r != _nodes.end()) {
+		_nodes.erase(r);
+		return true;
 	}
 
 	return false;
+}
+
+void fm::cloneNode(SceneNodeGraph * graph, SceneNode * node)
+{
+	auto parent = node->getParent();
+
+	// if no parent, add node to graph
+	if (parent == nullptr) {
+		graph->addNode(node->clone());
+	}
+	else { // if parent, add to that parent
+		parent->addChild(node);
+	}
 }
 
 int fm::createDynamicLightId()
@@ -103,14 +140,6 @@ int fm::createDynamicLightId()
 	assert(global_id >= GL_LIGHT0 || global_id <= GL_LIGHT7);
 
 	return id;
-}
-
-void fm::moveNodeUpHierarchy(SceneNode * node, SceneNodeGraph * graph)
-{
-}
-
-void fm::moveNodeDownHierarchy(SceneNode * node, SceneNodeGraph * graph)
-{
 }
 
 // VECTOR 3 IMPLEMENTATION
@@ -171,7 +200,8 @@ fm::Vector3 fm::Vector3::normalised()
 	return norm;
 }
 
-fm::Vector3 fm::Vector3::cross(const Vector3& v2) {
+fm::Vector3 fm::Vector3::cross(const Vector3& v2) 
+{
 	Vector3 cross(
 		(this->y * v2.z - this->z * v2.y),
 		(this->z * v2.x - this->x * v2.z),
@@ -180,7 +210,14 @@ fm::Vector3 fm::Vector3::cross(const Vector3& v2) {
 	return cross;
 }
 
-void fm::Vector3::subtract(const Vector3& v1, float scale) {
+bool fm::Vector3::isZero()
+{
+	// might need to implement epsilon..
+	return x == 0.0f && y == 0.0f && z == 0.0f;
+}
+
+void fm::Vector3::subtract(const Vector3& v1, float scale) 
+{
 	this->x -= (v1.x*scale);
 	this->y -= (v1.y*scale);
 	this->z -= (v1.z*scale);
@@ -241,6 +278,16 @@ fm::Vector3 fm::Vector3::operator+(const Vector3& v2) {
 
 fm::Vector3 fm::Vector3::operator-(const Vector3& v2) {
 	return Vector3(this->x - v2.x, this->y - v2.y, this->z - v2.z);
+}
+
+fm::Vector3 fm::Vector3::operator+(const float & v)
+{
+	return Vector3(this->x + v, this->y + v, this->z + v);
+}
+
+fm::Vector3 fm::Vector3::operator-(const float & v)
+{
+	return Vector3(this->x - v, this->y - v, this->z - v);
 }
 
 fm::Vector3 fm::Vector3::operator*(const Vector3 & v2)
@@ -344,38 +391,76 @@ float fm::Input::scrollAmount()
 // TEXTURE DATA IMPLEMENTATION
 fm::TextureData::TextureData() : glTextureId(0) { }
 
-// IMPLEMENTATION OF TEXTURE DATA
-fm::TextureData* fm::loadTextureData(std::string fp)
-{
-	TextureData* txrData = new TextureData();
-
-	// Assign filepath
-	txrData->filepath = fp;
-
-	// Load the texture
-	txrData->glTextureId = SOIL_load_OGL_texture(
-		fp.c_str(), SOIL_LOAD_AUTO, SOIL_CREATE_NEW_ID, 
-		SOIL_FLAG_MIPMAPS | SOIL_FLAG_NTSC_SAFE_RGB | SOIL_FLAG_COMPRESS_TO_DXT);
-
-	// Ensure texture loaded & was given a proper id
-	assert(txrData->glTextureId != 0);
-
-	return txrData;
-}
-
 // IMPLEMENTATION OF TEXTURE
 fm::Texture::Texture() : data(nullptr) { }
 
-fm::Texture::Texture(std::string fp) : Texture()
+fm::Texture::Texture(const std::string& fp) : Texture()
 {
-	data = loadTextureData(fp);
+	data = AssetManager::global->getTextureData(fp);
 }
 
-fm::Texture::~Texture()
+// ASSET MANAGER IMPLEMENTATION
+fm::AssetManager::AssetManager() : _loadedModelData(), _loadedTxData() { }
+
+// Single instance of AssetManager
+fm::AssetManager* fm::AssetManager::global = new AssetManager();
+
+fm::AssetManager::~AssetManager()
 {
-	if (data != nullptr) {
-		delete data;
+	// delete all loaded model data
+	for (auto modelData : _loadedModelData)
+		delete modelData.second;
+
+	_loadedModelData.clear();
+
+	// delete all loaded texture data
+	for (auto txData : _loadedTxData)
+		delete txData.second;
+
+	_loadedTxData.clear();
+}
+
+fm::TextureData * fm::AssetManager::getTextureData(const std::string & fp)
+{
+	// check if we have cached texture data
+	TextureData* txrData = _loadedTxData[fp];
+
+	// if we don't, load a texture, put it into the map
+	if (txrData == nullptr) {
+		txrData = new TextureData();
+
+		// Assign filepath
+		txrData->filepath = fp;
+
+		// Load the texture
+		txrData->glTextureId = SOIL_load_OGL_texture(fp.c_str(),
+			SOIL_LOAD_AUTO,
+			SOIL_CREATE_NEW_ID,
+			SOIL_FLAG_MIPMAPS | SOIL_FLAG_NTSC_SAFE_RGB | SOIL_FLAG_COMPRESS_TO_DXT);
+
+		// Put the texture into the map cache
+		_loadedTxData[fp] = txrData;
+
+		// Ensure texture loaded & was given a proper id
+		assert(txrData->glTextureId != 0);
 	}
+	
+	return txrData;
+}
+
+fm::ObjModel * fm::AssetManager::getObjModel(const std::string & fp)
+{
+	// check if we have this model loaded
+	ObjModel* model = _loadedModelData[fp];
+
+	if (model == nullptr) {
+		// load the model, cache it
+		model = loadObjModel(fp);
+
+		_loadedModelData[fp] = model;
+	}
+
+	return model;
 }
 
 // TRANSFORM IMPLEMENTATION
@@ -410,10 +495,10 @@ void fm::Transform::move(float x, float y, float z)
 }
 
 // CAMERA IMPLEMENTATION
-fm::Camera::Camera(int w, int h) : _screenW(w), _screenH(h) {
-	_pitch = 0.0f;
-	_roll = 0.0f;
-	_yaw = 0.0f;
+fm::Camera::Camera(int w, int h) : _screenW(w), _screenH(h) 
+{
+	_rotation = Vector3(0, 0, 0);
+	_position = Vector3(0, 0, 0);
 
 	_dirty = false;
 
@@ -429,19 +514,25 @@ void fm::Camera::onScreenResize(int w, int h)
 
 void fm::Camera::pitch(float p)
 {
-	_pitch += p;
+	_rotation.x += p;
 	_dirty = true;
 }
 
 void fm::Camera::yaw(float y)
 {
-	_yaw += y;
+	_rotation.y += y;
 	_dirty = true;
 }
 
-void fm::Camera::setPosition(Vector3 pos)
+void fm::Camera::setPosition(const Vector3& pos)
 {
 	_position = pos;
+	_dirty = true;
+}
+
+void fm::Camera::setOrientation(const Vector3 & orientation)
+{
+	_rotation = orientation;
 	_dirty = true;
 }
 
@@ -453,14 +544,16 @@ void fm::Camera::move(Vector3 offset)
 
 void fm::Camera::calculateDirections() 
 {
-	// Calculate cos & sin values for each axis rot (yaw, pitch, roll)
 	static const auto pi = 3.1415;
-	float cosR = cosf(_yaw * pi / 180.0f);
-	float cosP = cosf(_pitch * pi / 180.0f);
-	float cosY = cosf(_roll * pi / 180.0f);
-	float sinY = sinf(_yaw * pi / 180.0f);
-	float sinP = sinf(_pitch * pi / 180.0f);
-	float sinR = sinf(_roll * pi / 180.0f);
+	// rotate on x (pitch)
+	float cosP = cosf(_rotation.x * pi / 180.0f);
+	float sinP = sinf(_rotation.x * pi / 180.0f);
+	// rotate on y (yaw)
+	float cosY = cosf(_rotation.y * pi / 180.0f);
+	float sinY = sinf(_rotation.y * pi / 180.0f);
+	// rotate on z (roll)
+	float sinR = sinf(_rotation.z * pi / 180.0f);
+	float cosR = cosf(_rotation.z * pi / 180.0f);
 
 	// calculate forward vector from our angle
 	// and then apply our position so we know where we're looking
@@ -505,6 +598,14 @@ void fm::Camera::view()
 	);
 }
 
+void fm::Camera::reset()
+{
+	_position = Vector3();
+	_rotation = Vector3();
+
+	_dirty = true;
+}
+
 int fm::Camera::getCentreX()
 {
 	return _screenW / 2;
@@ -538,6 +639,16 @@ fm::Vector3 fm::Camera::back()
 fm::Vector3 fm::Camera::right()
 {
 	return _right;
+}
+
+const fm::Vector3& fm::Camera::getPosition()
+{
+	return _position;
+}
+
+const fm::Vector3& fm::Camera::getRotation()
+{
+	return _rotation;
 }
 
 fm::Vector3 fm::Camera::left()
@@ -638,6 +749,21 @@ fm::SceneNode::SceneNode()
 	nodeCategory = DEFAULT_NODE_CATEGORY;
 }
 
+fm::SceneNode::SceneNode(SceneNode * node) : SceneNode()
+{
+	name = node->name;
+	_parent = node->_parent;
+	enabled = node->enabled;
+	nodeCategory = node->nodeCategory;
+
+	// copy child nodes as well, if there are any
+	if (!node->childNodes.empty()) {
+		for (auto copyNode : node->childNodes) {
+			this->childNodes.push_back(copyNode->clone());
+		}
+	}
+}
+
 fm::SceneNode::~SceneNode()
 {
 	// delete all children
@@ -701,17 +827,36 @@ int fm::SceneNode::childCount()
 }
 
 // SHAPE NODE IMPLEMENTATION
-fm::ShapeNode::ShapeNode(Color color) {
+fm::ShapeNode::ShapeNode(Color color) : SceneNode()
+{
 	material.ambientColor = color;
-	name = "Shape Node";
+	name = "Unnamed Shape Node";
+}
+
+fm::ShapeNode::ShapeNode(ShapeNode * node) : SceneNode(node)
+{
+	material = node->material;
+}
+
+fm::SceneNode * fm::ShapeNode::clone()
+{
+	return new ShapeNode(this);
 }
 
 // CUBE NODE IMPLEMENTATION
-fm::CubeNode::CubeNode(Color color) : ShapeNode(color) {
+fm::CubeNode::CubeNode(Color color) : ShapeNode(color) 
+{
 	name = "Cube Node";
 }
 
 fm::CubeNode::CubeNode() : CubeNode(Color(1, 1, 1, 1)) { }
+
+fm::CubeNode::CubeNode(CubeNode * node) : ShapeNode(node) { }
+
+fm::SceneNode * fm::CubeNode::clone()
+{
+	return new CubeNode(this);
+}
 
 void fm::CubeNode::render()
 {
@@ -719,56 +864,75 @@ void fm::CubeNode::render()
 	applyTransform(transform);
 	applyMaterial(material);
 
-	glBegin(GL_QUADS);
+	bool txrApplied = applyTexture(material);
 
-		//Front
-		const Vector3 frontNormal(0.0f, 0.0f, 1.0f);
-		normalVertex(frontNormal, -0.5f, -0.5f, 0.5f);
-		normalVertex(frontNormal, 0.5f, -0.5f, 0.5f);
-		normalVertex(frontNormal, 0.5f, 0.5f, 0.5f);
-		normalVertex(frontNormal, -0.5f, 0.5f, 0.5f);
+	// Cube vertices, render order is: FRONT -> RIGHT -> BOTTOM -> LEFT -> TOP -> BACK
+	static const GLfloat vertices[] = {
+		// front
+		-0.5f, -0.5f, 0.5f,		0.5f, -0.5f, 0.5f,		0.5f, 0.5f, 0.5f,	-0.5f, 0.5f, 0.5f,
+		// right
+		0.5f, -0.5f, -0.5f,		0.5f, 0.5f, -0.5f,		0.5f, 0.5f, 0.5f,	0.5f, -0.5f, 0.5f,
+		// bottom
+		0.5f, -0.5f, 0.5f,		0.5f, -0.5f, -0.5f,		-0.5f, -0.5f, -0.5f,  -0.5f, -0.5f, 0.5f,
+		// left
+		-0.5f, -0.5f, 0.5f,		-0.5f, -0.5f, -0.5f,	-0.5f, 0.5f, -0.5f,		-0.5f, 0.5f, 0.5f,
+		// top
+		-0.5f, 0.5f, 0.5f,		0.5f, 0.5f, 0.5f,		0.5f, 0.5f, -0.5f,		-0.5f, 0.5f, -0.5f,
+		// back
+		-0.5f, -0.5f, -0.5f,	0.5f, -0.5f, -0.5f,		0.5f, 0.5f, -0.5f,		-0.5f, 0.5f, -0.5f
+	};
 
-		// Right
-		//fmColor(Color(0.5f, 0.0f, 0.5f, 1.0f));
-		const Vector3 rightNormal(1.0f, 0.0f, 0.0f);
-		normalVertex(rightNormal, 0.5f, -0.5f, -0.5f);
-		normalVertex(rightNormal, 0.5f, 0.5f, -0.5f);
-		normalVertex(rightNormal, 0.5f, 0.5f, 0.5f);
-		normalVertex(rightNormal, 0.5f, -0.5f, 0.5f);
+	// Cube normals
+	static const GLfloat normals[] = {
+		//front
+		0.0f, 0.0f, 1.0f,		0.0f, 0.0f, 1.0f,		0.0f, 0.0f, 1.0f,		0.0f, 0.0f, 1.0f,
+		// right
+		1.0f, 0.0f, 0.0f,		1.0f, 0.0f, 0.0f,		1.0f, 0.0f, 0.0f,		1.0f, 0.0f, 0.0f,
+		// bottom
+		0.0f, -1.0f, 0.0f,		0.0f, -1.0f, 0.0f,		0.0f, -1.0f, 0.0f,		0.0f, -1.0f, 0.0f,
+		// left
+		-1.0f, 0.0f, 0.0f,		-1.0f, 0.0f, 0.0f,		-1.0f, 0.0f, 0.0f,		-1.0f, 0.0f, 0.0f,
+		// top
+		0.0f, 1.0f, 0.0f,		0.0f, 1.0f, 0.0f,		0.0f, 1.0f, 0.0f,		0.0f, 1.0f, 0.0f,
+		// back
+		0.0f, 0.0f, -1.0f,		0.0f, 0.0f, -1.0f,		0.0f, 0.0f, -1.0f,		0.0f, 0.0f, -1.0f
+	};
 
-		// Bottom
-		//fmColor(Color(0.0f, 0.5f, 0.5f, 1.0f));
-		const Vector3 bottomNormal(0.0f, -1.0f, 0.0f);
-		normalVertex(bottomNormal, 0.5f, -0.5f, 0.5f);
-		normalVertex(bottomNormal, 0.5f, -0.5f, -0.5f);
-		normalVertex(bottomNormal, -0.5f, -0.5f, -0.5f);
-		normalVertex(bottomNormal, -0.5f, -0.5f, 0.5f);
+	// Cube UVs
+	static const GLfloat uvs[] = {
+		// front
+		0.0f, 0.5f,			0.25f, 0.5f,		0.25f, 0.25f,		0.0f, 0.25f,
+		// right
+		0.25f, 0.75f,		0.5f, 0.75f,		0.5f, 0.5f,			0.25f, 0.5f,
+		// bottom
+		0.25f, 0.5f,		0.5f, 0.5f,			0.5f, 0.25f,		0.25f, 0.25f,
+		// left
+		0.25f, 0.25f,		0.5f, 0.25f,		0.5f, 0.0f,			0.25f, 0.0f,
+		// top
+		0.75f, 0.5f,		1.0f, 0.5f,			1.0f, 0.25f,		0.75f, 0.25f,
+		// back
+		0.5f, 0.5f,			0.75f, 0.5f,		0.75f, 0.25f,		0.5f, 0.25f,
+	};
 
-		// Left
-		//fmColor(Color(0.0f, 0, 1, 1.0f));
-		const Vector3 leftNormal(-1.0f, 0.0f, 0.0f);
-		normalVertex(leftNormal, -0.5f, -0.5f, 0.5f);
-		normalVertex(leftNormal, -0.5f, -0.5f, -0.5f);
-		normalVertex(leftNormal, -0.5f, 0.5f, -0.5f);
-		normalVertex(leftNormal, -0.5f, 0.5f, 0.5f);
+	// enable and pass in our arrays
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_NORMAL_ARRAY);
 
-		// Top
-		//fmColor(Color(0.0f, 1, 0, 1.0f));
-		const Vector3 topNormal(0, 1, 0);
-		normalVertex(topNormal, -0.5f, 0.5f, 0.5f);
-		normalVertex(topNormal, 0.5f, 0.5f, 0.5f);
-		normalVertex(topNormal, 0.5f, 0.5f, -0.5f);
-		normalVertex(topNormal, -0.5f, 0.5f, -0.5f);
+	glVertexPointer(3, GL_FLOAT, 0, vertices);
+	glNormalPointer(GL_FLOAT, 0, normals);
 
-		// Back
-		//fmColor(Color(1.0f, 0, 0, 1.0f));
-		const Vector3 backNormal(0, 0, -1);
-		normalVertex(backNormal, -0.5f, -0.5f, -0.5f);
-		normalVertex(backNormal, 0.5f, -0.5f, -0.5f);
-		normalVertex(backNormal, 0.5f, 0.5f, -0.5f);
-		normalVertex(backNormal, -0.5f, 0.5f, -0.5f);
+	// if we're using the texture, use the tex coord array
+	if (txrApplied) {
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glTexCoordPointer(2, GL_FLOAT, 0, uvs);
+	}
 
-	glEnd();
+	glDrawArrays(GL_QUADS, 0, 24);
+
+	// disable our client states
+	glDisableClientState(GL_VERTEX_ARRAY);
+	glDisableClientState(GL_NORMAL_ARRAY);
+	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
 	// Draw children
 	SceneNode::render();
@@ -777,13 +941,25 @@ void fm::CubeNode::render()
 }
 
 // SPHERE NODE IMPLEMENTATION
-fm::SphereNode::SphereNode(Color color) : ShapeNode(color) {
+fm::SphereNode::SphereNode(Color color) : ShapeNode(color) 
+{
 	name = "Sphere Node";
 	_slices = 20;
 	_stacks = 20;
 }
 
 fm::SphereNode::SphereNode() : SphereNode(Color(1, 1, 1, 1)) { }
+
+fm::SphereNode::SphereNode(SphereNode * node) : ShapeNode(node)
+{
+	_slices = node->_slices;
+	_stacks = node->_stacks;
+}
+
+fm::SceneNode * fm::SphereNode::clone()
+{
+	return new SphereNode(this);
+}
 
 int & fm::SphereNode::getSlices()
 {
@@ -808,12 +984,23 @@ void fm::SphereNode::render()
 }
 
 // PLANE NODE IMPLEMENTATION
-fm::PlaneNode::PlaneNode(Color color, int quadSize, int width, int height) : ShapeNode(color) {
+fm::PlaneNode::PlaneNode(Color color, int quadSize, int width, int height) : ShapeNode(color) 
+{
 	buildQuads(quadSize, width, height);
 	name = "Plane Node";
 }
 
 fm::PlaneNode::PlaneNode() : PlaneNode(Color(1, 1, 1, 1), 4, 1, 1) { }
+
+fm::PlaneNode::PlaneNode(PlaneNode * node) : ShapeNode(node)
+{
+	buildQuads(node->_quadSize, node->_width, node->_height);
+}
+
+fm::SceneNode * fm::PlaneNode::clone()
+{
+	return new PlaneNode(this);
+}
 
 void fm::PlaneNode::render()
 {
@@ -821,6 +1008,7 @@ void fm::PlaneNode::render()
 	applyTransform(transform);
 	applyMaterial(material);
 
+	bool texApplied = applyTexture(material);
 
 	// On a plane, all normals face up.
 	static const Vector3 planeNormal = Vector3(0, 1, 0);
@@ -830,9 +1018,25 @@ void fm::PlaneNode::render()
 	// now write every triangle we built with buildQuads()
 	for (int i = 0; i < _tris.size(); ++i) {
 		Tri& tri = _tris[i];
-		normalVertex(planeNormal, tri.v1.x, tri.v1.y, tri.v1.z);
-		normalVertex(planeNormal, tri.v2.x, tri.v2.y, tri.v2.z);
-		normalVertex(planeNormal, tri.v3.x, tri.v3.y, tri.v3.z);
+		Tri& uv = _uvs[i];
+
+		// draw vertex1
+		glNormal3f(planeNormal.x, planeNormal.y, planeNormal.z);
+		if (texApplied)
+			glTexCoord2f(uv.v1.x, uv.v1.y);
+		glVertex3f(tri.v1.x, tri.v1.y, tri.v1.z);
+
+		// draw vertex2
+		glNormal3f(planeNormal.x, planeNormal.y, planeNormal.z);
+		if (texApplied)
+			glTexCoord2f(uv.v2.x, uv.v2.y);
+		glVertex3f(tri.v2.x, tri.v2.y, tri.v2.z);
+
+		// draw vertex3
+		glNormal3f(planeNormal.x, planeNormal.y, planeNormal.z);
+		if (texApplied)
+			glTexCoord2f(uv.v3.x, uv.v3.y);
+		glVertex3f(tri.v3.x, tri.v3.y, tri.v3.z);
 	}
 	
 	glEnd();
@@ -860,6 +1064,7 @@ int fm::PlaneNode::height()
 void fm::PlaneNode::buildQuads(int size, int width, int height)
 {
 	_tris.clear();
+	_uvs.clear();
 
 	_quadSize = size;
 	_width = width;
@@ -869,9 +1074,12 @@ void fm::PlaneNode::buildQuads(int size, int width, int height)
 	float x_offset = (sizef * (float)width) / 2.f;
 	float y_offset = (sizef * (float)height) / 2.f;
 
+	float uv_x_increment = 1.0f / width;
+	float uv_y_increment = 1.0f / height;
+
 	for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
-			// we're thinking in 2d, imagining a plane from top-down
+			// we're thinking in 2d, imagining a 2d surface, instead we need to think in topdown..
 			float x_pos = (float)(x * size) - x_offset;
 			float y_pos = (float)(y * size) - y_offset;
 
@@ -881,33 +1089,57 @@ void fm::PlaneNode::buildQuads(int size, int width, int height)
 			Vector3 v3 = Vector3(x_pos + sizef,		0,		y_pos + sizef);
 			Vector3 v4 = Vector3(x_pos,				0,		y_pos + sizef);
 
-			Tri tri1 = Tri(v1, v3, v4); //v1 v2 v4 make up the top left part
-			Tri tri2 = Tri(v1, v2, v3); //v1 v2 v3 make up the bottom right part
+			// Tri 1 is v1/v3/v4, Tri 2 is v1/v2/v3
+			_tris.push_back( Tri( v1, v3, v4) );
+			_tris.push_back( Tri( v1, v2, v3 ) );
 
-			_tris.push_back(tri1);
-			_tris.push_back(tri2);
+			// Now we want to figure out the UVs..
+			float xuv = (float)x * uv_x_increment;
+			float yuv = (float)y * uv_y_increment;
+
+			// organised as uv origin top-left coordinates, rather than matching the vertices
+			Vector3 uv1 = Vector3(xuv, yuv, 0); // top left
+			Vector3 uv2 = Vector3(xuv + uv_x_increment, yuv, 0); // top right
+			Vector3 uv3 = Vector3(xuv, yuv + uv_y_increment, 0); // bottom left
+			Vector3 uv4 = Vector3(xuv + uv_x_increment, yuv + uv_y_increment, 0); // bottom right
+
+			_uvs.push_back(Tri(uv3, uv2, uv1));
+			_uvs.push_back(Tri(uv3, uv4, uv2));
 		}
 	}
 }
 
 // LIGHT NODE IMPLEMENTATION
-fm::LightNode::LightNode(Color color) : color(color) {
+fm::LightNode::LightNode(Color color) : color(color) 
+{
 	name = "Light Node";
 	lightId = createDynamicLightId();
 	nodeCategory = LIGHT_CATEGORY;
 }
 
+fm::LightNode::LightNode(LightNode * node) : SceneNode(node)
+{
+	lightId = createDynamicLightId();
+	color = node->color;
+}
+
 // AMBIENT LIGHT NODE IMPLEMENTATION
-fm::AmbientLightNode::AmbientLightNode(Color color) : LightNode(color) {
+fm::AmbientLightNode::AmbientLightNode(Color color) : LightNode(color) 
+{
 	name = "Ambient Light Node";
 }
 
-fm::AmbientLightNode::AmbientLightNode(Color lightColor, Color diffuseColor) : AmbientLightNode(lightColor) {
+fm::AmbientLightNode::AmbientLightNode(Color lightColor, Color diffuseColor) : AmbientLightNode(lightColor) 
+{
 	diffuse = diffuseColor;
 }
 
-fm::AmbientLightNode::AmbientLightNode()
-	: AmbientLightNode(Color(1, 1, 1, 1), Color(1, 1, 1, 1)) { }
+fm::AmbientLightNode::AmbientLightNode() : AmbientLightNode(Color(1, 1, 1, 1), Color(1, 1, 1, 1)) { }
+
+fm::AmbientLightNode::AmbientLightNode(AmbientLightNode * node) : LightNode(node)
+{
+	diffuse = node->diffuse;
+}
 
 void fm::AmbientLightNode::render()
 {
@@ -921,13 +1153,20 @@ void fm::AmbientLightNode::render()
 	glEnable(lightId);
 }
 
+fm::SceneNode * fm::AmbientLightNode::clone()
+{
+	return new AmbientLightNode(this);
+}
+
 // DIRECTIONAL LIGHT NODE IMPLEMENTATION
-fm::DirectionalLightNode::DirectionalLightNode(Color color) : LightNode(color) {
+fm::DirectionalLightNode::DirectionalLightNode(Color color) : LightNode(color) 
+{
 	name = "Directional Light Node";
 }
 
-fm::DirectionalLightNode::DirectionalLightNode()
-	: DirectionalLightNode(Color(1, 1, 1, 1)) { }
+fm::DirectionalLightNode::DirectionalLightNode() : DirectionalLightNode(Color(1, 1, 1, 1)) { }
+
+fm::DirectionalLightNode::DirectionalLightNode(DirectionalLightNode * node) : LightNode(node) { }
 
 void fm::DirectionalLightNode::render()
 {
@@ -938,6 +1177,11 @@ void fm::DirectionalLightNode::render()
 	glLightfv(lightId, GL_DIFFUSE, light_diffuse);
 	glLightfv(lightId, GL_POSITION, light_position);
 	glEnable(lightId);
+}
+
+fm::SceneNode * fm::DirectionalLightNode::clone()
+{
+	return new DirectionalLightNode(this);
 }
 
 // SPOT LIGHT NODE IMPLEMENTATION
@@ -955,6 +1199,14 @@ fm::SpotLightNode::SpotLightNode(Color lightColor, Color diffuseColor, Vector3 d
 fm::SpotLightNode::SpotLightNode()
 	: SpotLightNode(Color(1, 1, 1, 1), Color(1, 1, 1, 1), Vector3(1, 1, 1)) { }
 
+fm::SpotLightNode::SpotLightNode(SpotLightNode * node) : LightNode(node)
+{
+	cutoff = node->cutoff;
+	exponent = node->exponent;
+	direction = node->direction;
+	diffuse = node->diffuse;
+}
+
 void fm::SpotLightNode::render()
 {
 	GLfloat light_ambient[] = { color.r, color.g, color.b, color.a };
@@ -971,13 +1223,26 @@ void fm::SpotLightNode::render()
 	glEnable(lightId);
 }
 
+fm::SceneNode * fm::SpotLightNode::clone()
+{
+	return new SpotLightNode(this);
+}
+
 // MESH NODE IMPLEMENTATION
-fm::MeshNode::MeshNode() : model(nullptr), material() { 
+fm::MeshNode::MeshNode() : model(nullptr), material() 
+{ 
 	name = "Mesh Node";
 }
 
-fm::MeshNode::MeshNode(std::string modelPath) : MeshNode() {
-	model = loadObjModel(modelPath);
+fm::MeshNode::MeshNode(const std::string& modelPath) : MeshNode() 
+{
+	model = AssetManager::global->getObjModel(modelPath);
+}
+
+fm::MeshNode::MeshNode(MeshNode * node) : SceneNode(node)
+{
+	material = node->material;
+	model = node->model;
 }
 
 void fm::MeshNode::render()
@@ -990,18 +1255,7 @@ void fm::MeshNode::render()
 	if (model != nullptr) {
 		// Check if we're using a texture, if so, bind it!
 		Texture* texture = material.texture;
-		bool usingTexture = false;
-
-		if (texture != nullptr && texture->data != nullptr) {
-			// Linear filtering
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			
-			// Bind the texture using the loaded texture id
-			glBindTexture(GL_TEXTURE_2D, material.texture->data->glTextureId);
-			
-			// Indicate that we're using the texture
-			usingTexture = true;
-		}
+		bool usingTexture = applyTexture(material);
 
 		glBegin(GL_TRIANGLES);
 
@@ -1021,7 +1275,6 @@ void fm::MeshNode::render()
 					// use the texture coords for the texture we've bound
 					auto& texcoord = model->textureCoords[index.texCoordIndex - 1];
 					glTexCoord2f(texcoord.x, texcoord.y);
-					//glTexCoord3f(texcoord.x, texcoord.y, texcoord.z);
 				}
 				
 				// use the vertex
@@ -1036,3 +1289,166 @@ void fm::MeshNode::render()
 
 	glPopMatrix();
 }
+
+fm::SceneNode * fm::MeshNode::clone()
+{
+	return new MeshNode(this);
+}
+
+// IMPLEMENTATION OF CYLINDER NODE
+fm::CylinderNode::CylinderNode() : ShapeNode(Color(1, 1, 1, 1))
+{
+	name = "Cylinder Node";
+
+	// build the cylinder vertex data
+	build(20);
+}
+
+fm::CylinderNode::CylinderNode(CylinderNode * node) : ShapeNode(node)
+{
+	// copy vertices
+	this->_vertices = node->_vertices;
+}
+
+int fm::CylinderNode::numSegments()
+{
+	return _numSegments;
+}
+
+void fm::CylinderNode::build(int segments)
+{
+	// ensure that segments is not a negative count
+	assert(segments > 0);
+
+	_vertices.clear();
+	_uvs.clear();
+	_normals.clear();
+
+	_numSegments = segments;
+
+	float theta = 0.0f;
+	float delta = 0.0f;
+
+	float theta_increment = (2.0 * 3.1415) / segments;
+	float delta_increment = 3.1415 / segments;
+	float uv_increment = 1.0 / segments;
+
+	// loop long->lat, figure out the vertex position, normals + tex coords
+	for (int longSegment = 0; longSegment < segments; longSegment++) {
+
+		// reset theta to 0.0
+		theta = 0.0f;
+
+		for (int latSegment = 0; latSegment < segments; latSegment++) {
+
+			// calculate UVs
+			float uvx = uv_increment * longSegment;
+			float uvy = uv_increment * latSegment;
+			Vector3 uv1 = Vector3(uvx, uvy, 0); // top left
+			Vector3 uv2 = Vector3(uvx + uv_increment, uvy, 0); // top right
+			Vector3 uv3 = Vector3(uvx + uv_increment, uvy + uv_increment, 0); // bot right
+			Vector3 uv4 = Vector3(uvx, uvy + uv_increment, 0); // bot left
+
+			// figure out vertex1
+			pushVertUv(
+				cosf(theta) * sinf(delta),
+				cosf(delta), 
+				sinf(theta) * sinf(delta),
+				uv4.x, uv4.y
+			);
+
+			// figure out vertex2
+			pushVertUv(
+				cosf(theta + theta_increment) * sinf(delta),
+				cosf(delta),
+				sinf(theta + theta_increment) * sinf(delta),
+				uv3.x, uv3.y
+			);
+
+			// figure out vertex3
+			pushVertUv(
+				cosf(theta + theta_increment) * sinf(delta + delta_increment),
+				cosf(delta + delta_increment),
+				sinf(theta + theta_increment) * sinf(delta + delta_increment),
+				uv2.x, uv2.y
+			);
+
+			// figure out vertex4
+			pushVertUv(
+				cosf(theta) * sinf(delta + delta_increment),
+				cosf(delta + delta_increment),
+				sinf(theta) * sinf(delta + delta_increment),
+				uv1.x, uv1.y
+			);
+
+			// increment theta
+			theta += theta_increment;
+		}
+
+		// increment delta
+		delta += delta_increment;
+	}
+
+	// cheap hack to reduce sphere to 1 unit
+	for (int i = 0; i < _vertices.size(); i++) {
+		float& vertex = _vertices[i];
+		vertex /= 2.0;
+
+		float& normal = _normals[i];
+		normal /= 2.0;
+	}
+}
+
+void fm::CylinderNode::pushVertUv(float x, float y, float z, float u, float v)
+{
+	_vertices.push_back(x);
+	_vertices.push_back(y);
+	_vertices.push_back(z);
+
+	// In a unit circle, where r = 1, the normal direction
+	// is the same as the vertex position.
+	_normals.push_back(x);
+	_normals.push_back(y);
+	_normals.push_back(z);
+
+	_uvs.push_back(u);
+	_uvs.push_back(v);
+}
+
+void fm::CylinderNode::render()
+{
+	glPushMatrix();
+	applyTransform(transform);
+	applyMaterial(material);
+
+	bool texApplied = applyTexture(material);
+
+	// enable array states, pass in all
+	glEnableClientState(GL_VERTEX_ARRAY);
+	glEnableClientState(GL_NORMAL_ARRAY);
+
+	glVertexPointer(3, GL_FLOAT, 0, _vertices.data());
+	glNormalPointer(GL_FLOAT, 0, _normals.data());
+
+	if (texApplied) {
+		glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+		glTexCoordPointer(2, GL_FLOAT, 0, _uvs.data());
+	}
+	
+	// renders vertices, normals, uvs..
+	glDrawArrays(GL_QUADS, 0, _vertices.size() / 3);
+	
+	// disable array states
+	glDisableClientState(GL_VERTEX_ARRAY);
+	glDisableClientState(GL_NORMAL_ARRAY);
+	if (texApplied)
+		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+
+	glPopMatrix();
+}
+
+fm::SceneNode * fm::CylinderNode::clone()
+{
+	return new CylinderNode(this);
+}
+

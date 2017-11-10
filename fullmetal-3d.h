@@ -31,11 +31,11 @@ namespace fm {
 	 */
 	struct ObjModel {
 	public:
-		/*
-		 * The filepath of the obj model.
-		 */
+		// Editor & IO data
 		std::string filepath;
+		bool switchedUvs;
 
+		// Imported draw data
 		std::vector<Vector3> vertices;
 		std::vector<Vector3> vertexNormals;
 		std::vector<Vector3> textureCoords;
@@ -68,4 +68,11 @@ namespace fm {
 	 * Returns nullptr on failure to load.
 	 */
 	ObjModel* loadObjModel(std::string filepath);
+
+	/*
+	 * Switches the UVs on a obj model. 
+	 * Inverses the switch flag on the obj model.
+	 * Use this if you don't want to rotatate textures to match uv coords.
+	 */
+	void switchModelUvs(ObjModel* model);
 }

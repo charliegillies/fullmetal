@@ -9,6 +9,7 @@
 // otherwise we will not compile the gui code.
 #ifdef FM_EDITOR
 #include <vector>
+#include <functional>
 
 struct ImDrawData;
 
@@ -44,6 +45,11 @@ namespace fm {
 			 */
 			std::string filepath;
 
+			/*
+			 * Called when a node is double clicked in the tree.
+			 */
+			std::function<void(SceneNode*)> on_node_doubleclicked;
+
 			GraphRenderConfig();
 		};
 
@@ -75,7 +81,7 @@ namespace fm {
 		 * Indicates that a .obj file at a relative address to the exe
 		 * is ready for importing.
 		 */
-		void importObjFileCallback(std::string path);
+		void importObjFileCallback(const std::string& path);
 
 
 		/*
@@ -83,7 +89,7 @@ namespace fm {
 		 * Indicates that a .png or .jpg file at a relative address to the exe
 		 * is ready for importing.
 		 */
-		void importTxrFileCallback(std::string path);
+		void importTxrFileCallback(const std::string& path);
 
 		/*
 		 * Renders the add node options from the node type table.

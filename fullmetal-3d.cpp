@@ -17,6 +17,7 @@ fm::ObjModel * fm::ObjModelLoader::load(std::string fp)
 	// create a model, begin the readLine procedure to parse it
 	ObjModel* model = new ObjModel();
 	model->filepath = fp;
+	model->switchedUvs = false;
 
 	std::string data;
 	while (std::getline(stream, data))
@@ -107,4 +108,14 @@ fm::ObjModel* fm::loadObjModel(std::string filepath)
 	ObjModelLoader objLoader;
 	ObjModel* model = objLoader.load(filepath);
 	return model;
+}
+
+void fm::switchModelUvs(ObjModel * model)
+{
+	model->switchedUvs = !model->switchedUvs;
+
+	for (auto& uv : model->textureCoords) {
+		uv.x = 1.0f - uv.x;
+		uv.y = 1.0f - uv.y;
+	}
 }

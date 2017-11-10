@@ -105,10 +105,10 @@ void fm::gui::drawTxrImporter()
 	txrDirectory->update();
 }
 
-void fm::gui::importObjFileCallback(std::string path)
+void fm::gui::importObjFileCallback(const std::string& path)
 {
 	// Load model, ensure load happened properly
-	ObjModel* model = loadObjModel(path);
+	ObjModel* model = AssetManager::global->getObjModel(path);
 	assert(model != nullptr);
 
 	// Assign our model ref, set ref to null so gui closes
@@ -116,7 +116,7 @@ void fm::gui::importObjFileCallback(std::string path)
 	_importObjModelRef = nullptr;
 }
 
-void fm::gui::importTxrFileCallback(std::string path)
+void fm::gui::importTxrFileCallback(const std::string& path)
 {
 	// Load txr, assign to ref, set ref to null so gui closes
 	Texture* txr = new Texture(path);
@@ -154,14 +154,20 @@ void fm::gui::drawAddNodeOptions(SceneNodeGraph* nodeGraph, GraphRenderConfig* g
 
 		// CREATE CHILD NODE
 		ImGui::SameLine();
-		if (ImGui::Button("Create child node")) {
+		if (ImGui::Button("Create child")) {
 			graphConfig->selected_node->addChild(typeTable->createNodeFromId(id));
 		}
 
 		// DELETE NODE
 		ImGui::SameLine();
-		if (ImGui::Button("Delete node")) {
+		if (ImGui::Button("Delete")) {
 			deleteNodeFromGraph(graphConfig, nodeGraph);
+		}
+
+		// CLONE NODE
+		ImGui::SameLine();
+		if (ImGui::Button("Clone")) {
+			cloneNode(nodeGraph, graphConfig->selected_node);
 		}
 	}
 }
@@ -269,8 +275,15 @@ fm::SceneNode* fm::gui::drawNodeSelect(SceneNode * node, GraphRenderConfig* conf
 	// draw the tree node, test if it's open..
 	bool nodeOpen = ImGui::TreeNodeEx(id.c_str(), node_flags);
 	// check if our tree node was selected
-	if (ImGui::IsItemClicked() && clicked == nullptr)
+	if (ImGui::IsItemClicked() && clicked == nullptr) {
 		clicked = node;
+
+		// invoke callback 
+		if (ImGui::IsMouseDoubleClicked(0)) {
+			if (config->on_node_doubleclicked)
+				config->on_node_doubleclicked(clicked);
+		}
+	}
 
 	if (nodeOpen && childNodeCount > 0) {
 		// render all children, poll for a node selection
@@ -409,12 +422,12 @@ void fm::gui::introspectMaterial(Material & material)
 void fm::gui::startGui(int width, int height)
 {
 	// Obj directory can import .obj files.
-	objDirectory = new fm::gui::DirectoryGuiView("models");
+	objDirectory = new fm::gui::DirectoryGuiView("Assets");
 	objDirectory->setAllowedFiletypes(std::vector<std::string> { ".obj" });
 	objDirectory->setSelectCallback(importObjFileCallback);
 
 	// Txr directory can import .png and .jpg files.
-	txrDirectory = new fm::gui::DirectoryGuiView("models");
+	txrDirectory = new fm::gui::DirectoryGuiView("Assets");
 	txrDirectory->setAllowedFiletypes(std::vector<std::string> { ".png", ".jpg" });
 	txrDirectory->setSelectCallback(importTxrFileCallback);
 

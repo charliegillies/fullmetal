@@ -17,6 +17,7 @@ namespace fm
 	class DirectionalLightNode;
 	class SpotLightNode;
 	class MeshNode;
+	class CylinderNode;
 
 	class Transform;
 	class Vector3;
@@ -43,6 +44,8 @@ namespace fm
 		void introspectSpotLightNode(SpotLightNode* spotLight);
 
 		void introspectMeshNode(MeshNode* meshNode);
+
+		void introspectCylinderNode(CylinderNode* node);
 	}
 }
 

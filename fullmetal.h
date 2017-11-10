@@ -3,7 +3,7 @@
  * node-driven scene graph. The node graph has features like:
  * Handling parent-child matrix relationships.
  * Primitive shapes such as cubes, spheres, polygons. 
- * Basic Lights including ambient, spot and directional.
+ * Basic lights including ambient, spot and directional.
  * Parsing obj files, materials, textures, etc.
 
  * It also comes with a JSON I/O and front-end gui
@@ -24,6 +24,7 @@
 #include "fullmetal-config.h"
 #include <vector>
 #include <string>
+#include <map>
 
 namespace fm {
 
@@ -41,6 +42,7 @@ namespace fm {
 	struct Texture;
 	struct Material;
 	struct ObjModel;
+	class AssetManager;
 
 	void clamp(int& value, int min, int max);
 	void clamp(float& value, float min, float max);
@@ -61,6 +63,17 @@ namespace fm {
 	void applyTransform(Transform& transform);
 
 	/*
+	 * Shortcut to apply a texture through a material.
+	 * Returns true/false depending if the texture was applied.
+	 */
+	bool applyTexture(Material& material);
+
+	/*
+	 * Calls glNormal3f, glTexcoord2f and glVertex3f in order.
+	 */
+	void normUvVert(float nX, float nY, float nZ, float uvx, float uvy, float vx, float vy, float vz);
+
+	/*
 	 * Shortcut to call glNormal(normal.x, normal.y, normal.z) and glVertex(x, y, z).
 	 */
 	void normalVertex(const Vector3& normal, float x, float y, float z);
@@ -71,14 +84,15 @@ namespace fm {
 	bool removeNodeFromVector(SceneNode* node, std::vector<SceneNode*>& nodes);
 
 	/*
+	 * Handles the cloning of a node.
+	 */
+	void cloneNode(SceneNodeGraph* graph, SceneNode* node);
+
+	/*
 	 * Gets a dynamic value between GL_LIGHT0 and GL_LIGHT7
 	 * So every light in the scene can use a dynamic ID.
 	 */
 	int createDynamicLightId();
-
-	void moveNodeUpHierarchy(SceneNode* node, SceneNodeGraph* graph);
-
-	void moveNodeDownHierarchy(SceneNode* node, SceneNodeGraph* graph);
 
 	/*
 	 * Utility to help handle 3D space.
@@ -106,6 +120,8 @@ namespace fm {
 		float dot(const Vector3& v2);
 		Vector3 cross(const Vector3& v2);
 
+		bool isZero();
+
 		void normalise();
 		Vector3 normalised();
 		float length();
@@ -116,6 +132,9 @@ namespace fm {
 
 		Vector3 operator+(const Vector3& v2);
 		Vector3 operator-(const Vector3& v2);
+
+		Vector3 operator+(const float& v);
+		Vector3 operator-(const float& v);
 
 		Vector3 operator*(const Vector3& v2);
 		Vector3 operator*(const float& scalar);
@@ -235,11 +254,9 @@ namespace fm {
 	private:
 		// directional vectors, calculated in every rotation change
 		Vector3 _forward, _forwardTarget, _up, _right;
-		// the position of the camera
-		Vector3 _position;
-		// pitch = x axis, yaw = y axis, roll = z axis
-		float _yaw, _pitch, _roll;
-		// if rotation has changed
+		// the position & orientation of the camera
+		Vector3 _position, _rotation;
+		// if rotation or position needs to be recalculated
 		bool _dirty;
 		// screen size
 		int _screenW, _screenH;
@@ -253,14 +270,17 @@ namespace fm {
 		/** Call on the screen resize event. */
 		void onScreenResize(int w, int h);
 
-		/** Rotates on y axis. */
+		/** Rotates on x axis. */
 		void pitch(float p);
 
-		/** Rotates on x axis. */
+		/** Rotates on y axis. */
 		void yaw(float y);
 
 		/** Sets position of the camera. */
-		void setPosition(Vector3 pos);
+		void setPosition(const Vector3& pos);
+
+		/** Sets the orientation of the camera. */
+		void setOrientation(const Vector3& orientation);
 
 		/** Offsets the camera position by the given Vector3 */
 		void move(Vector3 offset);
@@ -271,11 +291,20 @@ namespace fm {
 		/** Applies the camera view. */
 		void view();
 
+		/** Resets the position and orientation of the camera to default. */
+		void reset();
+
 		/** Gets the middle of the screen on X. */
 		int getCentreX();
 
 		/** Gets the middle of the screen on Y. */
 		int getCentreY();
+
+		/** Gets the current position of the camera. */
+		const Vector3& getPosition();
+
+		/** Gets the rotation, yaw/pitch/roll orientation.*/
+		const Vector3& getRotation();
 
 		/** Up direction from the camera transform. */
 		Vector3 up();
@@ -330,11 +359,6 @@ namespace fm {
 	};
 
 	/*
-	 * Loads a TextureData from a filepath using SOIL.
-	 */
-	TextureData* loadTextureData(std::string fp);
-
-	/*
 	 * Wrapper around texture data with specific information that
 	 * will be used by OpenGL for materials, 3d models, etc.
 	 */
@@ -347,15 +371,44 @@ namespace fm {
 		/*
 		 * Creates a texture, attempts to load texture data via the filepath given.
 		 */
-		Texture(std::string fp);
-		
-		~Texture();
+		Texture(const std::string& fp);
 
 		/*
 		 * Data that was loaded from the img using SOIL.
 		 * Is a nullptr by default.
+
+		 * Note: TextureData is owned by the asset manager, so the texture 
+		 * object will not delete it at the end of Textures own lifetime.
 		 */
 		TextureData* data;
+	};
+
+	/*
+	 * The owner of assets in the game scene.
+	 * This is the centralized area where assets will be created and deleted. 
+	 * The asset manager "owns" the assets that are loaded in the scene.
+
+	 * We could have used a 'smart' template design here, but all that would have done
+	 * is increased loading time and made the code harder to read.
+	 */
+	class AssetManager {
+	private:
+		std::map<const std::string, TextureData*> _loadedTxData;
+		std::map<const std::string, ObjModel*> _loadedModelData;
+
+		// forces access through instance
+		AssetManager();
+		~AssetManager();
+
+	public:
+		/* Global instance of the asset manager. */
+		static AssetManager* global;
+
+		/* Gets the cached version of texture data or loads a new one. */
+		TextureData* getTextureData(const std::string& fp);
+		
+		/* Gets the cached version of the ObjModel or loads a new one. */
+		ObjModel* getObjModel(const std::string& fp);
 	};
 
 	/*
@@ -468,6 +521,7 @@ namespace fm {
 
 	public:
 		SceneNode();
+		SceneNode(SceneNode* node);
 
 		~SceneNode();
 
@@ -500,6 +554,11 @@ namespace fm {
 		 * Render the scene node.
 		 */
 		virtual void render();
+
+		/*
+		* Creates a clone of the scene node.
+		*/
+		virtual SceneNode* clone() = 0;
 
 		/*
 		 * Adds a child to the scene node.
@@ -540,6 +599,9 @@ namespace fm {
 	class ShapeNode : public SceneNode {
 	public:
 		ShapeNode(Color color);
+		ShapeNode(ShapeNode* node);
+
+		SceneNode* clone() override;
 
 		/*
 		 * The material of the shape.
@@ -554,6 +616,9 @@ namespace fm {
 	public:
 		CubeNode(Color color);
 		CubeNode();
+		CubeNode(CubeNode* node);
+
+		SceneNode* clone() override;
 
 		void render() override;
 	};
@@ -569,6 +634,9 @@ namespace fm {
 	public:
 		SphereNode(Color color);
 		SphereNode();
+		SphereNode(SphereNode* node);
+
+		SceneNode* clone() override;
 
 		/* */
 		int& getSlices();
@@ -588,6 +656,9 @@ namespace fm {
 	public:
 		PlaneNode(Color color, int quadSize, int width, int height);
 		PlaneNode();
+		PlaneNode(PlaneNode* node);
+
+		SceneNode* clone() override;
 
 		void render() override;
 
@@ -601,6 +672,7 @@ namespace fm {
 		int _width;
 		int _height;
 		std::vector<Tri> _tris;
+		std::vector<Tri> _uvs;
 	};
 
 	/*
@@ -614,6 +686,7 @@ namespace fm {
 		Color color;
 
 		LightNode(Color color);
+		LightNode(LightNode* node);
 	};
 
 	/*
@@ -624,10 +697,12 @@ namespace fm {
 		AmbientLightNode(Color color);
 		AmbientLightNode(Color lightColor, Color diffuseColor);
 		AmbientLightNode();
+		AmbientLightNode(AmbientLightNode* node);
 
 		Color diffuse;
 
 		void render() override;
+		SceneNode* clone() override;
 	};
 
 	/*
@@ -638,8 +713,10 @@ namespace fm {
 	public:
 		DirectionalLightNode(Color color);
 		DirectionalLightNode();
+		DirectionalLightNode(DirectionalLightNode* node);
 
 		void render() override;
+		SceneNode* clone() override;
 	};
 
 	/*
@@ -650,6 +727,7 @@ namespace fm {
 	public:
 		SpotLightNode(Color lightColor, Color diffuseColor, Vector3 direction);
 		SpotLightNode();
+		SpotLightNode(SpotLightNode* node);
 
 		Vector3 direction;
 		Color diffuse;
@@ -658,6 +736,7 @@ namespace fm {
 		float exponent;
 
 		void render() override;
+		SceneNode* clone() override;
 	};
 
 	/*
@@ -669,9 +748,35 @@ namespace fm {
 		Material material;
 
 		MeshNode();
-		MeshNode(std::string modelPath);
+		MeshNode(const std::string& modelPath);
+		MeshNode(MeshNode* node);
 
 		void render() override;
+		SceneNode* clone() override;
+	};
+
+	/*
+	 * A cylinder is a type of shape node that is generated in code.
+	 */
+	class CylinderNode : public ShapeNode {
+	private:
+		std::vector<float> _vertices;
+		std::vector<float> _normals;
+		std::vector<float> _uvs;
+
+		void pushVertUv(float x, float y, float z, float u, float v);
+	
+		int _numSegments;
+
+	public:
+		CylinderNode();
+		CylinderNode(CylinderNode* node);
+
+		int numSegments();
+		void build(int segments);
+
+		void render() override;
+		SceneNode* clone() override;
 	};
 }
 

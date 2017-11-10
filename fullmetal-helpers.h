@@ -2,28 +2,54 @@
 
 /*
  * General helpers and extensions for fullmetal. Including: 
- * - Editor Camera Controller
- * - ....
- * - ....
+ *  Editor Camera Controller
+ *  Lerp functions
+ *  
+ *  
  */
+
+#include "fullmetal.h"
 
 namespace fm
 {
 	class Camera;
 	class Input;
 	class Vector3;
+	class ObjModel;
 
 	/*
 	 * A camera controller for the editor mode of fullmetal.
+	 * Expects an input object and a camera object, keeps references to
+	 * but deletes neither object.
 	 */
 	class EditorCameraController {
 	private:
-		bool _mouseUsed;
 		Camera* camera;
+
+		bool _mouseUsed;
 		Input* input;
+		int _mLastX, _mLastY;
+
+		bool _lerping;
+		Vector3 _lerpTarget;
+		float _lerpDt;
+
+		void useKeyControl(float dt);
+		void useMouseControl(float dt);
+
+		void lerpCamera(float dt);
+
+		void debugGui(float dt);
 
 	public:
+		bool showDebugGui;
+
 		EditorCameraController(Camera* camera, Input* input);
+
+		/*
+		 * Begins movement towards a given position.
+		 */
+		void lerp_to(const Vector3& v);
 
 		/*
 		 * If the camera is currently using mouse control.
@@ -34,12 +60,13 @@ namespace fm
 		 * Controls the given camera. Listens to user input in order to control it.
 		 */
 		void update(float dt);
-
-		/*
-		 * Moves the camera to look at a specific point in 3d space.
-		 */
-		void lookTowards(Vector3* transform);
 	};
 
-	float smoothlerp(float start, float end);
+	// Linear lerp
+	float linear_lerp(const float start, const float end);
+
+	// Smooth lerp
+	float smooth_lerp(const float start, const float end);
+
+	fm::Vector3 lerp_vector(Vector3& start, Vector3& destination, const float lerp);
 }

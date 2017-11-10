@@ -33,6 +33,7 @@ fm::NodeTypeTable* fm::createDefaultTypeTable()
 	auto& cube = nodeTable->registerNode<fm::CubeNode>("CubeNode");
 	auto& sphere = nodeTable->registerNode<fm::SphereNode>("SphereNode");
 	auto& plane = nodeTable->registerNode<fm::PlaneNode>("PlaneNode");
+	auto& cylinder = nodeTable->registerNode<fm::CylinderNode>("CylinderNode");
 
 	// register light nodes..
 	auto& ambient_light = nodeTable->registerNode<fm::AmbientLightNode>("AmbientLightNode");
@@ -57,6 +58,8 @@ fm::NodeTypeTable* fm::createDefaultTypeTable()
 	spot_light.set_parse_functions(fm::io::readSpotLightNode, fm::io::writeSpotLightNode);
 
 	mesh_node.set_parse_functions(fm::io::readMeshNode, fm::io::writeMeshNode);
+
+	cylinder.set_parse_functions(fm::io::readCylinderNode, fm::io::writeCylinderNode);
 #endif
 
 #ifdef FM_EDITOR
@@ -70,6 +73,8 @@ fm::NodeTypeTable* fm::createDefaultTypeTable()
 	spot_light.set_introspection_function(fm::gui::introspectSpotLightNode);
 
 	mesh_node.set_introspection_function(fm::gui::introspectMeshNode);
+
+	cylinder.set_introspection_function(fm::gui::introspectCylinderNode);
 #endif
 
 	return nodeTable;

@@ -381,14 +381,20 @@ void fm::io::readSpotLightNode(json & j, SpotLightNode & spotLight)
 void fm::io::writeObjModel(json & j, ObjModel* model)
 {
 	j["filepath"] = model->filepath;
+	j["switchedUvs"] = model->switchedUvs;
 }
 
 void fm::io::readObjModel(json & j, ObjModel** model)
 {
 	// get the filepath, load the obj model from it
 	std::string filepath = j["filepath"];
-	ObjModel* m = loadObjModel(filepath);
+	bool switched = j["switchedUvs"];
+
+	ObjModel* m = AssetManager::global->getObjModel(filepath);
 	*model = m;
+
+	if (switched)
+		switchModelUvs(m);
 }
 
 void fm::io::writeMeshNode(json & j, MeshNode & meshNode)
@@ -418,6 +424,22 @@ void fm::io::readMeshNode(json & j, MeshNode & meshNode)
 	if (!jModel.is_null()) {
 		readObjModel(jModel, &meshNode.model);
 	}
+}
+
+void fm::io::writeCylinderNode(json & j, CylinderNode & node)
+{
+	writeSceneNode(j, node);
+	writeShapeNode(j, node);
+
+	j["segments"] = node.numSegments();
+}
+
+void fm::io::readCylinderNode(json & j, CylinderNode & node)
+{
+	readSceneNode(j, node);
+	readShapeNode(j, node);
+
+	node.build(j["segments"]);
 }
 
 #endif // END

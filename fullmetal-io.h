@@ -21,6 +21,7 @@ namespace fm {
 	class DirectionalLightNode;
 	class SpotLightNode;
 	class MeshNode;
+	class CylinderNode;
 
 	class Transform;
 	class Vector3;
@@ -102,6 +103,9 @@ namespace fm {
 
 		void writeMeshNode(json& j, MeshNode& meshNode);
 		void readMeshNode(json& j, MeshNode& meshNode);
+
+		void writeCylinderNode(json& j, CylinderNode& node);
+		void readCylinderNode(json& j, CylinderNode& node);
 	}
 }
 

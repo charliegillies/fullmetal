@@ -63,7 +63,7 @@ namespace fm {
 		class DirectoryGuiView {
 		private:
 			DirectoryBrowseResult* _result;
-			std::function<void(std::string)> _selectedCallback;
+			std::function<void(const std::string&)> _selectedCallback;
 			std::vector<std::string> _okFileTypes;
 
 			/** Draw a directory. The function is recursive. */
