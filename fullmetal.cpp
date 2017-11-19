@@ -280,6 +280,11 @@ fm::Vector3 fm::Vector3::operator-(const Vector3& v2) {
 	return Vector3(this->x - v2.x, this->y - v2.y, this->z - v2.z);
 }
 
+fm::Vector3 fm::Vector3::operator/(const float & v)
+{
+	return Vector3(this->x / v, this->y / v, this->z / v);
+}
+
 fm::Vector3 fm::Vector3::operator+(const float & v)
 {
 	return Vector3(this->x + v, this->y + v, this->z + v);
@@ -506,10 +511,50 @@ fm::Camera::Camera(int w, int h) : _screenW(w), _screenH(h)
 	calculateDirections();
 }
 
+void fm::Camera::pushController(CameraController * controller)
+{
+	_controlStack.push(controller);
+	controller->start(this);
+}
+
+void fm::Camera::popController()
+{
+	// don't exit if there's no control stacks
+	if (_controlStack.size() == 0) return;
+
+	// get top, pop, delete controller
+	CameraController* controller = _controlStack.top();
+	_controlStack.pop();
+	delete controller;
+}
+
 void fm::Camera::onScreenResize(int w, int h)
 {
 	_screenW = w;
 	_screenH = h;
+
+	if (h == 0)
+		h = 1;
+
+	float ratio = (float)w / (float)h;
+	_fov = 45.0f;
+	_nearPlane = 0.1f;
+	_farPlane = 100.0f;
+
+	// Use the projection matrix
+	glMatrixMode(GL_PROJECTION);
+
+	// Reset the matrix
+	glLoadIdentity();
+
+	// Set viewport to be the entire window
+	glViewport(0, 0, w, h);
+
+	// Set the correct perspective
+	gluPerspective(_fov, ratio, _nearPlane, _farPlane);
+
+	// Back to model view
+	glMatrixMode(GL_MODELVIEW);
 }
 
 void fm::Camera::pitch(float p)
@@ -571,15 +616,18 @@ void fm::Camera::calculateDirections()
 	_right = _forward.cross(_up);
 }
 
-void fm::Camera::update() 
+void fm::Camera::update(float dt) 
 {
 	// if there have been no changes, don't run
-	if (!_dirty) {
-		return;
+	if (_dirty) {
+		calculateDirections();
+		_dirty = false;
 	}
 
-	calculateDirections();
-	_dirty = false;
+	// if we have a controller in stack, get top and update it.
+	if (!_controlStack.empty()) {
+		_controlStack.top()->update(this, dt);
+	}
 }
 
 void fm::Camera::view() 
@@ -614,6 +662,31 @@ int fm::Camera::getCentreX()
 int fm::Camera::getCentreY()
 {
 	return _screenH / 2;
+}
+
+int fm::Camera::getScreenWidth()
+{
+	return _screenW;
+}
+
+int fm::Camera::getScreenHeight()
+{
+	return _screenH;
+}
+
+float fm::Camera::getFov()
+{
+	return _fov;
+}
+
+float fm::Camera::getNearPlane()
+{
+	return _nearPlane;
+}
+
+float fm::Camera::getFarPlane()
+{
+	return _farPlane;
 }
 
 fm::Vector3 fm::Camera::up()
@@ -849,9 +922,16 @@ fm::CubeNode::CubeNode(Color color) : ShapeNode(color)
 	name = "Cube Node";
 }
 
+fm::CubeNode::CubeNode(const std::string & texture) : CubeNode()
+{
+	material.texture = new Texture(texture);
+}
+
 fm::CubeNode::CubeNode() : CubeNode(Color(1, 1, 1, 1)) { }
 
 fm::CubeNode::CubeNode(CubeNode * node) : ShapeNode(node) { }
+
+
 
 fm::SceneNode * fm::CubeNode::clone()
 {
@@ -932,7 +1012,10 @@ void fm::CubeNode::render()
 	// disable our client states
 	glDisableClientState(GL_VERTEX_ARRAY);
 	glDisableClientState(GL_NORMAL_ARRAY);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+
+	if (txrApplied) {
+		glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+	}
 
 	// Draw children
 	SceneNode::render();

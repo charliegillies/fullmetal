@@ -25,6 +25,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <stack>
 
 namespace fm {
 
@@ -132,6 +133,8 @@ namespace fm {
 
 		Vector3 operator+(const Vector3& v2);
 		Vector3 operator-(const Vector3& v2);
+
+		Vector3 operator/(const float& v);
 
 		Vector3 operator+(const float& v);
 		Vector3 operator-(const float& v);
@@ -248,6 +251,15 @@ namespace fm {
 	};
 	
 	/*
+	 * Utility for handling camera control.
+	 */
+	class CameraController {
+	public:
+		virtual void start(Camera* camera) = 0;
+		virtual void update(Camera* camera, float dt) = 0;
+	};
+
+	/*
 	 * Handles the viewport, frustrum, etc.
 	 */
 	class Camera {
@@ -258,14 +270,29 @@ namespace fm {
 		Vector3 _position, _rotation;
 		// if rotation or position needs to be recalculated
 		bool _dirty;
+
+		// stack of camera controllers
+		std::stack<CameraController*> _controlStack;
+
 		// screen size
 		int _screenW, _screenH;
+		// window & frustrum calculation
+		float _fov, _nearPlane, _farPlane;
 
 		// calculates the directions
 		void calculateDirections();
 
 	public:
 		Camera(int screenW, int screenH);
+
+		/* Pushes a controller to the top of the stack. 
+		   The camera will own the controller, and delete it
+		   when the popController() method is called.
+		*/
+		void pushController(CameraController* controller);
+
+		/** Pops the controller from the top of the stack. */
+		void popController();
 
 		/** Call on the screen resize event. */
 		void onScreenResize(int w, int h);
@@ -286,7 +313,7 @@ namespace fm {
 		void move(Vector3 offset);
 
 		/** Calculates the directions, if there's been a change. */
-		void update();
+		void update(float dt);
 
 		/** Applies the camera view. */
 		void view();
@@ -299,6 +326,21 @@ namespace fm {
 
 		/** Gets the middle of the screen on Y. */
 		int getCentreY();
+
+		/** Gets the width of the screen. */
+		int getScreenWidth();
+
+		/** Gets the height of the screen. */
+		int getScreenHeight();
+
+		/** Gets the field of view. */
+		float getFov();
+
+		/** Gets the near plane. */
+		float getNearPlane();
+
+		/** Gets the far plane. */
+		float getFarPlane();
 
 		/** Gets the current position of the camera. */
 		const Vector3& getPosition();
@@ -615,6 +657,7 @@ namespace fm {
 	class CubeNode : public ShapeNode {
 	public:
 		CubeNode(Color color);
+		CubeNode(const std::string& texture);
 		CubeNode();
 		CubeNode(CubeNode* node);
 
